@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Task;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 class TaskRequest extends FormRequest
@@ -13,7 +14,7 @@ class TaskRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true; // Authorization will be handled by policies
+        return Auth::check();
     }
 
     /**
@@ -23,91 +24,92 @@ class TaskRequest extends FormRequest
      */
     public function rules(): array
     {
-        $taskId = $this->route('task') ? $this->route('task')->id : null;
-
+        $taskId = $this->route('task');
+        $isUpdate = $this->isMethod('PUT') || $this->isMethod('PATCH');
+        
         return [
-            // Multilingual name validation
-            'name' => 'required|array',
-            'name.en' => 'required|string|max:255',
+            // Multilingual name field
+            'name' => $isUpdate ? 'sometimes|array' : 'required|array',
+            'name.en' => $isUpdate ? 'sometimes|string|max:255' : 'required|string|max:255',
             'name.fr' => 'nullable|string|max:255',
             'name.de' => 'nullable|string|max:255',
-
-            // Multilingual description validation
-            'description' => 'nullable|array',
+            
+            // Multilingual description field
+            'description' => 'sometimes|nullable|array',
             'description.en' => 'nullable|string|max:1000',
             'description.fr' => 'nullable|string|max:1000',
             'description.de' => 'nullable|string|max:1000',
-
+            
             // Status validation
             'status' => [
-                'required',
+                $isUpdate ? 'sometimes' : 'required',
                 Rule::in(Task::getStatuses())
             ],
-
+            
             // Priority validation
             'priority' => [
-                'required',
+                $isUpdate ? 'sometimes' : 'required',
                 Rule::in(Task::getPriorities())
             ],
-
+            
             // Due date validation
-            'due_date' => 'nullable|date|after:now',
-
+            'due_date' => 'sometimes|nullable|date|after:now',
+            
             // Parent task validation
             'parent_id' => [
+                'sometimes',
                 'nullable',
-                'exists:tasks,id',
+                'integer',
+                Rule::exists('tasks', 'id')->where(function ($query) {
+                    $query->where('user_id', Auth::id())
+                          ->whereNull('deleted_at');
+                }),
                 function ($attribute, $value, $fail) use ($taskId) {
-                    if ($value) {
-                        // Prevent self-reference
-                        if ($taskId && $value == $taskId) {
-                            $fail('A task cannot be its own parent.');
-                        }
-
-                        // Prevent creating subtask of a subtask (max 2 levels)
-                        $parentTask = Task::find($value);
-                        if ($parentTask && $parentTask->isSubtask()) {
-                            $fail('Cannot create subtask of a subtask. Maximum nesting level is 2.');
-                        }
-
-                        // Ensure parent belongs to the same user
-                        if ($parentTask && $parentTask->user_id !== auth()->id()) {
-                            $fail('Parent task must belong to the same user.');
-                        }
+                    if ($value && $taskId && $value == $taskId) {
+                        $fail('A task cannot be its own parent.');
                     }
-                }
+                },
             ],
         ];
     }
 
     /**
-     * Get custom error messages for validator errors.
+     * Get custom messages for validator errors.
      *
      * @return array<string, string>
      */
     public function messages(): array
     {
         return [
-            'name.required' => 'Task name is required.',
-            'name.en.required' => 'Task name in English is required.',
-            'name.en.max' => 'Task name in English cannot exceed 255 characters.',
-            'name.fr.max' => 'Task name in French cannot exceed 255 characters.',
-            'name.de.max' => 'Task name in German cannot exceed 255 characters.',
+            'name.required' => 'The task name is required.',
+            'name.array' => 'The task name must be provided as translations.',
+            'name.en.required' => 'The English task name is required.',
+            'name.en.string' => 'The English task name must be a string.',
+            'name.en.max' => 'The English task name may not be greater than 255 characters.',
+            'name.fr.string' => 'The French task name must be a string.',
+            'name.fr.max' => 'The French task name may not be greater than 255 characters.',
+            'name.de.string' => 'The German task name must be a string.',
+            'name.de.max' => 'The German task name may not be greater than 255 characters.',
             
-            'description.en.max' => 'Task description in English cannot exceed 1000 characters.',
-            'description.fr.max' => 'Task description in French cannot exceed 1000 characters.',
-            'description.de.max' => 'Task description in German cannot exceed 1000 characters.',
+            'description.array' => 'The task description must be provided as translations.',
+            'description.en.string' => 'The English task description must be a string.',
+            'description.en.max' => 'The English task description may not be greater than 1000 characters.',
+            'description.fr.string' => 'The French task description must be a string.',
+            'description.fr.max' => 'The French task description may not be greater than 1000 characters.',
+            'description.de.string' => 'The German task description must be a string.',
+            'description.de.max' => 'The German task description may not be greater than 1000 characters.',
             
-            'status.required' => 'Task status is required.',
-            'status.in' => 'Invalid task status. Must be one of: pending, in_progress, completed, cancelled.',
+            'status.required' => 'The task status is required.',
+            'status.in' => 'The selected status is invalid. Valid options are: ' . implode(', ', Task::getStatuses()),
             
-            'priority.required' => 'Task priority is required.',
-            'priority.in' => 'Invalid task priority. Must be one of: low, medium, high, urgent.',
+            'priority.required' => 'The task priority is required.',
+            'priority.in' => 'The selected priority is invalid. Valid options are: ' . implode(', ', Task::getPriorities()),
             
-            'due_date.date' => 'Due date must be a valid date.',
-            'due_date.after' => 'Due date must be in the future.',
+            'due_date.date' => 'The due date must be a valid date.',
+            'due_date.after' => 'The due date must be in the future.',
             
-            'parent_id.exists' => 'Selected parent task does not exist.',
+            'parent_id.integer' => 'The parent task ID must be an integer.',
+            'parent_id.exists' => 'The selected parent task does not exist or you do not have permission to access it.',
         ];
     }
 
@@ -119,37 +121,134 @@ class TaskRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'name.en' => 'task name (English)',
-            'name.fr' => 'task name (French)',
-            'name.de' => 'task name (German)',
-            'description.en' => 'task description (English)',
-            'description.fr' => 'task description (French)',
-            'description.de' => 'task description (German)',
+            'name.en' => 'English task name',
+            'name.fr' => 'French task name',
+            'name.de' => 'German task name',
+            'description.en' => 'English task description',
+            'description.fr' => 'French task description',
+            'description.de' => 'German task description',
             'parent_id' => 'parent task',
         ];
     }
 
     /**
+     * Configure the validator instance.
+     *
+     * @param  \Illuminate\Validation\Validator  $validator
+     * @return void
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            // Additional validation for parent task hierarchy
+            if ($this->has('parent_id') && $this->parent_id) {
+                $this->validateParentTaskHierarchy($validator);
+            }
+            
+            // Validate multilingual fields have at least English
+            if ($this->has('name') && is_array($this->name)) {
+                if (empty($this->name['en'])) {
+                    $validator->errors()->add('name.en', 'The English task name is required.');
+                }
+            }
+        });
+    }
+
+    /**
+     * Validate parent task hierarchy to prevent deep nesting and circular references
+     *
+     * @param \Illuminate\Validation\Validator $validator
+     * @return void
+     */
+    private function validateParentTaskHierarchy($validator): void
+    {
+        $parentTask = Task::where('id', $this->parent_id)
+            ->where('user_id', Auth::id())
+            ->first();
+            
+        if (!$parentTask) {
+            return; // Will be caught by exists rule
+        }
+        
+        // Check if parent is already a subtask (prevent deep nesting)
+        if ($parentTask->isSubtask()) {
+            $validator->errors()->add(
+                'parent_id',
+                'Cannot create subtask of a subtask. Maximum nesting level is 2.'
+            );
+        }
+        
+        // Check for circular references (if updating existing task)
+        $taskId = $this->route('task');
+        if ($taskId && $this->wouldCreateCircularReference($taskId, $this->parent_id)) {
+            $validator->errors()->add(
+                'parent_id',
+                'This would create a circular reference in the task hierarchy.'
+            );
+        }
+    }
+
+    /**
+     * Check if setting a parent would create a circular reference
+     *
+     * @param int $taskId
+     * @param int $parentId
+     * @return bool
+     */
+    private function wouldCreateCircularReference(int $taskId, int $parentId): bool
+    {
+        // Get all subtask IDs recursively
+        $subtaskIds = $this->getAllSubtaskIds($taskId);
+        
+        // If the proposed parent is in the subtask chain, it would create a circular reference
+        return in_array($parentId, $subtaskIds);
+    }
+
+    /**
+     * Get all subtask IDs recursively
+     *
+     * @param int $taskId
+     * @return array
+     */
+    private function getAllSubtaskIds(int $taskId): array
+    {
+        $subtaskIds = [];
+        
+        $subtasks = Task::where('parent_id', $taskId)->pluck('id')->toArray();
+        
+        foreach ($subtasks as $subtaskId) {
+            $subtaskIds[] = $subtaskId;
+            $subtaskIds = array_merge($subtaskIds, $this->getAllSubtaskIds($subtaskId));
+        }
+        
+        return $subtaskIds;
+    }
+
+    /**
      * Prepare the data for validation.
+     *
+     * @return void
      */
     protected function prepareForValidation(): void
     {
-        // Ensure name and description are arrays if they're not provided as such
-        if ($this->has('name') && !is_array($this->name)) {
-            $this->merge([
-                'name' => ['en' => $this->name]
-            ]);
+        // Ensure parent_id is null if empty string is provided
+        if ($this->has('parent_id') && $this->parent_id === '') {
+            $this->merge(['parent_id' => null]);
         }
-
-        if ($this->has('description') && !is_array($this->description)) {
-            $this->merge([
-                'description' => ['en' => $this->description]
-            ]);
+        
+        // Clean up empty translation fields
+        if ($this->has('name') && is_array($this->name)) {
+            $name = array_filter($this->name, function ($value) {
+                return !is_null($value) && $value !== '';
+            });
+            $this->merge(['name' => $name]);
         }
-
-        // Set user_id to current authenticated user
-        $this->merge([
-            'user_id' => auth()->id()
-        ]);
+        
+        if ($this->has('description') && is_array($this->description)) {
+            $description = array_filter($this->description, function ($value) {
+                return !is_null($value) && $value !== '';
+            });
+            $this->merge(['description' => empty($description) ? null : $description]);
+        }
     }
 }

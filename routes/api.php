@@ -39,4 +39,15 @@ Route::middleware('auth:sanctum')->group(function () {
             ]
         ]);
     });
+    
+    // Task management routes
+    Route::apiResource('tasks', App\Http\Controllers\TaskController::class);
+    Route::post('/tasks/{id}/restore', [App\Http\Controllers\TaskController::class, 'restore']);
+    
+    // Subtask management routes
+    Route::get('/tasks/{id}/subtasks', [App\Http\Controllers\TaskController::class, 'subtasks']);
+    Route::post('/tasks/{parentId}/subtasks', [App\Http\Controllers\TaskController::class, 'createSubtask']);
+    Route::put('/tasks/{parentId}/subtasks/reorder', [App\Http\Controllers\TaskController::class, 'reorderSubtasks']);
+    Route::put('/subtasks/{subtaskId}/move', [App\Http\Controllers\TaskController::class, 'moveSubtask']);
+    Route::post('/tasks/{parentId}/subtasks/bulk', [App\Http\Controllers\TaskController::class, 'bulkSubtaskOperations']);
 });
