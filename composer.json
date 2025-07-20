@@ -15,6 +15,7 @@
         "laravel/tinker": "^2.10.1",
         "pestphp/pest": "^3.8",
         "predis/predis": "^3.0",
+        "ratchet/pawl": "^0.4.3",
         "spatie/laravel-translatable": "^6.11"
     },
     "require-dev": {
