@@ -1,23 +1,64 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './bootstrap';
 import '../css/app.css';
 
+// Context
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+
+// Layout
+import { Layout, ProtectedRoute } from '@/components';
+import { Spinner } from '@/components/ui/spinner';
+
+// Pages
+import Dashboard from '@/pages/Dashboard';
+import TasksPage from '@/pages/TasksPage';
+import NewTaskPage from '@/pages/NewTaskPage';
+import LoginPage from '@/pages/LoginPage';
+import RegisterPage from '@/pages/RegisterPage';
+
+function AppRoutes() {
+    const { isAuthenticated, isLoading } = useAuth();
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <Spinner size="lg" />
+            </div>
+        );
+    }
+
+    return (
+        <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            
+            {/* Protected routes */}
+            <Route path="/" element={
+                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <Layout />
+                </ProtectedRoute>
+            }>
+                <Route index element={<Dashboard />} />
+                <Route path="tasks" element={<TasksPage />} />
+                <Route path="tasks/new" element={<NewTaskPage />} />
+            </Route>
+            
+            {/* Catch all route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+    );
+}
+
 function App() {
     return (
-        <div className="min-h-screen bg-gray-100">
-            <div className="container mx-auto px-4 py-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-8">
-                    Task Management App
-                </h1>
-                <div className="bg-white rounded-lg shadow-md p-6">
-                    <p className="text-gray-600">
-                        Welcome to the Task Management Application. 
-                        The foundation has been set up successfully!
-                    </p>
-                </div>
-            </div>
-        </div>
+        <AuthProvider>
+            <Router>
+                <AppRoutes />
+            </Router>
+        </AuthProvider>
     );
 }
 
