@@ -224,6 +224,129 @@ class Task extends Model
     }
 
     /**
+     * Get the task name in the current locale or fallback.
+     */
+    public function getLocalizedName(?string $locale = null): string
+    {
+        $locale = $locale ?? app()->getLocale();
+        return $this->getTranslation('name', $locale) ?? $this->getTranslation('name', config('app.fallback_locale')) ?? '';
+    }
+
+    /**
+     * Get the task description in the current locale or fallback.
+     */
+    public function getLocalizedDescription(?string $locale = null): ?string
+    {
+        $locale = $locale ?? app()->getLocale();
+        $description = $this->getTranslation('description', $locale);
+        
+        if (empty($description)) {
+            $description = $this->getTranslation('description', config('app.fallback_locale'));
+        }
+        
+        return $description;
+    }
+
+    /**
+     * Set translation for a specific field and locale.
+     */
+    public function setTranslation(string $field, string $locale, ?string $value): self
+    {
+        if (!in_array($field, $this->translatable)) {
+            throw new \InvalidArgumentException("Field '{$field}' is not translatable.");
+        }
+
+        $translations = $this->getTranslations($field);
+        $translations[$locale] = $value;
+        $this->setTranslations($field, $translations);
+
+        return $this;
+    }
+
+    /**
+     * Get all translations for a specific field.
+     */
+    public function getFieldTranslations(string $field): array
+    {
+        if (!in_array($field, $this->translatable)) {
+            throw new \InvalidArgumentException("Field '{$field}' is not translatable.");
+        }
+
+        return $this->getTranslations($field);
+    }
+
+    /**
+     * Check if a translation exists for a specific field and locale.
+     */
+    public function hasTranslation(string $field, string $locale): bool
+    {
+        if (!in_array($field, $this->translatable)) {
+            return false;
+        }
+
+        $translations = $this->getTranslations($field);
+        return isset($translations[$locale]) && !empty($translations[$locale]);
+    }
+
+    /**
+     * Get available locales for a specific field.
+     */
+    public function getAvailableLocales(string $field): array
+    {
+        if (!in_array($field, $this->translatable)) {
+            return [];
+        }
+
+        $translations = $this->getTranslations($field);
+        return array_keys(array_filter($translations, function ($value) {
+            return !empty($value);
+        }));
+    }
+
+    /**
+     * Get translation completion percentage for the task.
+     */
+    public function getTranslationCompleteness(): array
+    {
+        $supportedLocales = array_keys(config('app.available_locales', ['en' => 'English']));
+        $completeness = [];
+
+        foreach ($supportedLocales as $locale) {
+            $hasName = $this->hasTranslation('name', $locale);
+            $hasDescription = $this->hasTranslation('description', $locale);
+            
+            // Name is required, description is optional
+            $completeness[$locale] = [
+                'name' => $hasName,
+                'description' => $hasDescription,
+                'complete' => $hasName, // Only name is required for completeness
+                'percentage' => $hasName ? 100 : 0,
+            ];
+        }
+
+        return $completeness;
+    }
+
+    /**
+     * Scope to filter tasks by locale availability.
+     */
+    public function scopeWithTranslation($query, string $locale, ?string $field = null)
+    {
+        if ($field && in_array($field, $this->translatable)) {
+            return $query->whereJsonContains($field, [$locale => true]);
+        }
+
+        // Check if any translatable field has the locale
+        $query->where(function ($q) use ($locale) {
+            foreach ($this->translatable as $translatableField) {
+                $q->orWhereJsonContains($translatableField, [$locale => true]);
+            }
+        });
+
+        return $query;
+    }
+
+    /**
      * Boot the model.
      */
     protected static function boot()
@@ -242,6 +365,11 @@ class Task extends Model
                 if ($parent && $parent->isSubtask()) {
                     throw new \InvalidArgumentException('Cannot create subtask of a subtask. Maximum nesting level is 2.');
                 }
+            }
+
+            // Ensure at least the fallback locale has a name
+            if (empty($task->getTranslation('name', config('app.fallback_locale')))) {
+                throw new \InvalidArgumentException('Task name is required in the fallback locale.');
             }
         });
     }

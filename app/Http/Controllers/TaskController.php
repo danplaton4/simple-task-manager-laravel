@@ -1075,4 +1075,278 @@ class TaskController extends ApiController
             return $this->serverErrorResponse('An error occurred while performing the bulk operation. Please try again.');
         }
     }
+
+    /**
+
+     * Get translation information for a specific task
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function translations(int $id): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            
+            // Find the task
+            $task = Task::where('id', $id)
+                ->where('user_id', $user->id)
+                ->first();
+                
+            if (!$task) {
+                return response()->json([
+                    'error' => 'Task not found',
+                    'message' => 'The requested task could not be found or you do not have permission to access it.'
+                ], 404);
+            }
+            
+            return response()->json([
+                'task_id' => $task->id,
+                'translations' => [
+                    'name' => $task->getFieldTranslations('name'),
+                    'description' => $task->getFieldTranslations('description'),
+                ],
+                'completeness' => $task->getTranslationCompleteness(),
+                'available_locales' => array_keys(config('app.available_locales', ['en' => 'English'])),
+                'current_locale' => app()->getLocale(),
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve task translations', [
+                'task_id' => $id,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'error' => 'Failed to retrieve translations',
+                'message' => 'An error occurred while fetching task translations. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update translations for a specific task
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function updateTranslations(Request $request, int $id): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            
+            // Find the task
+            $task = Task::where('id', $id)
+                ->where('user_id', $user->id)
+                ->first();
+                
+            if (!$task) {
+                return response()->json([
+                    'error' => 'Task not found',
+                    'message' => 'The requested task could not be found or you do not have permission to access it.'
+                ], 404);
+            }
+            
+            // Validate request
+            $supportedLocales = array_keys(config('app.available_locales', ['en' => 'English']));
+            $validatedData = $request->validate([
+                'translations' => 'required|array',
+                'translations.name' => 'sometimes|array',
+                'translations.description' => 'sometimes|array',
+            ]);
+            
+            // Validate each locale
+            foreach ($validatedData['translations'] as $field => $translations) {
+                if (!in_array($field, ['name', 'description'])) {
+                    return response()->json([
+                        'error' => 'Invalid field',
+                        'message' => "Field '{$field}' is not translatable."
+                    ], 422);
+                }
+                
+                foreach ($translations as $locale => $value) {
+                    if (!in_array($locale, $supportedLocales)) {
+                        return response()->json([
+                            'error' => 'Invalid locale',
+                            'message' => "Locale '{$locale}' is not supported."
+                        ], 422);
+                    }
+                    
+                    // Validate field length
+                    $maxLength = $field === 'name' ? 255 : 1000;
+                    if (strlen($value) > $maxLength) {
+                        return response()->json([
+                            'error' => 'Validation failed',
+                            'message' => "The {$field} in {$locale} may not be greater than {$maxLength} characters."
+                        ], 422);
+                    }
+                }
+            }
+            
+            DB::beginTransaction();
+            
+            // Update translations
+            foreach ($validatedData['translations'] as $field => $translations) {
+                foreach ($translations as $locale => $value) {
+                    $task->setTranslation($field, $locale, $value);
+                }
+            }
+            
+            // Ensure English name is present (required)
+            if (!$task->hasTranslation('name', 'en')) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'message' => 'English name translation is required.'
+                ], 422);
+            }
+            
+            $task->save();
+            
+            // Reload relationships
+            $task->load(['subtasks', 'parent', 'user']);
+            
+            DB::commit();
+            
+            // Clear cache
+            $this->cacheService->clearTaskCache($task);
+            
+            // Broadcast event
+            $this->eventService->broadcastTaskUpdated($task, ['translations_updated' => true]);
+            
+            Log::info('Task translations updated successfully', [
+                'task_id' => $task->id,
+                'user_id' => $user->id,
+                'updated_fields' => array_keys($validatedData['translations'])
+            ]);
+            
+            return response()->json([
+                'data' => new TaskResource($task),
+                'translations' => [
+                    'name' => $task->getFieldTranslations('name'),
+                    'description' => $task->getFieldTranslations('description'),
+                ],
+                'completeness' => $task->getTranslationCompleteness(),
+                'message' => 'Task translations updated successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            Log::error('Failed to update task translations', [
+                'task_id' => $id,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'data' => $request->all()
+            ]);
+            
+            return response()->json([
+                'error' => 'Failed to update translations',
+                'message' => 'An error occurred while updating task translations. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get translation completeness report for user's tasks
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function translationReport(Request $request): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            
+            // Get all user's tasks
+            $tasks = Task::where('user_id', $user->id)
+                ->select(['id', 'name', 'description', 'status'])
+                ->get();
+            
+            $supportedLocales = array_keys(config('app.available_locales', ['en' => 'English']));
+            $report = [
+                'total_tasks' => $tasks->count(),
+                'locales' => [],
+                'overall_completeness' => [],
+            ];
+            
+            // Calculate completeness for each locale
+            foreach ($supportedLocales as $locale) {
+                $completeNames = 0;
+                $completeDescriptions = 0;
+                
+                foreach ($tasks as $task) {
+                    if ($task->hasTranslation('name', $locale)) {
+                        $completeNames++;
+                    }
+                    if ($task->hasTranslation('description', $locale)) {
+                        $completeDescriptions++;
+                    }
+                }
+                
+                $report['locales'][$locale] = [
+                    'name' => config("app.available_locales.{$locale}", $locale),
+                    'completeness' => [
+                        'names' => [
+                            'complete' => $completeNames,
+                            'total' => $tasks->count(),
+                            'percentage' => $tasks->count() > 0 ? round(($completeNames / $tasks->count()) * 100, 2) : 0,
+                        ],
+                        'descriptions' => [
+                            'complete' => $completeDescriptions,
+                            'total' => $tasks->count(),
+                            'percentage' => $tasks->count() > 0 ? round(($completeDescriptions / $tasks->count()) * 100, 2) : 0,
+                        ],
+                    ],
+                ];
+            }
+            
+            // Calculate overall completeness
+            $totalPossibleTranslations = $tasks->count() * count($supportedLocales);
+            $totalCompleteNames = 0;
+            $totalCompleteDescriptions = 0;
+            
+            foreach ($tasks as $task) {
+                foreach ($supportedLocales as $locale) {
+                    if ($task->hasTranslation('name', $locale)) {
+                        $totalCompleteNames++;
+                    }
+                    if ($task->hasTranslation('description', $locale)) {
+                        $totalCompleteDescriptions++;
+                    }
+                }
+            }
+            
+            $report['overall_completeness'] = [
+                'names' => [
+                    'complete' => $totalCompleteNames,
+                    'total' => $totalPossibleTranslations,
+                    'percentage' => $totalPossibleTranslations > 0 ? round(($totalCompleteNames / $totalPossibleTranslations) * 100, 2) : 0,
+                ],
+                'descriptions' => [
+                    'complete' => $totalCompleteDescriptions,
+                    'total' => $totalPossibleTranslations,
+                    'percentage' => $totalPossibleTranslations > 0 ? round(($totalCompleteDescriptions / $totalPossibleTranslations) * 100, 2) : 0,
+                ],
+            ];
+            
+            return response()->json([
+                'report' => $report,
+                'supported_locales' => config('app.available_locales', ['en' => 'English']),
+                'current_locale' => app()->getLocale(),
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to generate translation report', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'error' => 'Failed to generate report',
+                'message' => 'An error occurred while generating the translation report. Please try again.'
+            ], 500);
+        }
+    }
 }

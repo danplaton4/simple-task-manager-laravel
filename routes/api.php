@@ -28,6 +28,11 @@ Route::get('/health', function () {
     ]);
 });
 
+// Locale management routes (public)
+Route::get('/locale/current', [App\Http\Controllers\LocaleController::class, 'current']);
+Route::post('/locale/switch', [App\Http\Controllers\LocaleController::class, 'switch']);
+Route::get('/locale/translations', [App\Http\Controllers\LocaleController::class, 'translations']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
@@ -43,6 +48,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Task management routes
     Route::apiResource('tasks', App\Http\Controllers\TaskController::class);
     Route::post('/tasks/{id}/restore', [App\Http\Controllers\TaskController::class, 'restore']);
+    
+    // Task translation routes
+    Route::get('/tasks/{id}/translations', [App\Http\Controllers\TaskController::class, 'translations']);
+    Route::put('/tasks/{id}/translations', [App\Http\Controllers\TaskController::class, 'updateTranslations']);
+    Route::get('/tasks/translation-report', [App\Http\Controllers\TaskController::class, 'translationReport']);
     
     // Subtask management routes
     Route::get('/tasks/{id}/subtasks', [App\Http\Controllers\TaskController::class, 'subtasks']);

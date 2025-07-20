@@ -15,15 +15,16 @@ class TaskResource extends JsonResource
     public function toArray(Request $request): array
     {
         $locale = app()->getLocale();
+        $includeTranslations = $request->boolean('include_translations', false);
         
-        return [
+        $data = [
             'id' => $this->id,
-            'name' => $this->getTranslatedName($locale),
-            'name_translations' => $this->name,
-            'description' => $this->getTranslatedDescription($locale),
-            'description_translations' => $this->description,
+            'name' => $this->getLocalizedName($locale),
+            'description' => $this->getLocalizedDescription($locale),
             'status' => $this->status,
+            'status_label' => __("messages.task.status.{$this->status}"),
             'priority' => $this->priority,
+            'priority_label' => __("messages.task.priority.{$this->priority}"),
             'due_date' => $this->due_date?->toISOString(),
             'parent_id' => $this->parent_id,
             'user_id' => $this->user_id,
@@ -43,6 +44,17 @@ class TaskResource extends JsonResource
             'subtasks' => TaskResource::collection($this->whenLoaded('subtasks')),
             'user' => new UserResource($this->whenLoaded('user')),
             
+            // Translation metadata
+            'translation_info' => [
+                'current_locale' => $locale,
+                'available_locales' => $this->getAvailableLocales('name'),
+                'completeness' => $this->getTranslationCompleteness(),
+                'has_translation' => [
+                    'name' => $this->hasTranslation('name', $locale),
+                    'description' => $this->hasTranslation('description', $locale),
+                ],
+            ],
+            
             // Additional metadata
             'meta' => [
                 'days_until_due' => $this->getDaysUntilDue(),
@@ -55,37 +67,19 @@ class TaskResource extends JsonResource
                 }),
             ],
         ];
+
+        // Include full translations if requested
+        if ($includeTranslations) {
+            $data['translations'] = [
+                'name' => $this->getFieldTranslations('name'),
+                'description' => $this->getFieldTranslations('description'),
+            ];
+        }
+
+        return $data;
     }
 
-    /**
-     * Get translated name for the current locale
-     *
-     * @param string $locale
-     * @return string|null
-     */
-    private function getTranslatedName(string $locale): ?string
-    {
-        if (is_array($this->name)) {
-            return $this->name[$locale] ?? $this->name['en'] ?? null;
-        }
-        
-        return $this->name;
-    }
 
-    /**
-     * Get translated description for the current locale
-     *
-     * @param string $locale
-     * @return string|null
-     */
-    private function getTranslatedDescription(string $locale): ?string
-    {
-        if (is_array($this->description)) {
-            return $this->description[$locale] ?? $this->description['en'] ?? null;
-        }
-        
-        return $this->description;
-    }
 
     /**
      * Get days until due date
@@ -128,7 +122,8 @@ class TaskResource extends JsonResource
         return [
             'meta' => [
                 'locale' => app()->getLocale(),
-                'available_locales' => ['en', 'fr', 'de'],
+                'available_locales' => array_keys(config('app.available_locales', ['en' => 'English'])),
+                'supported_locales' => config('app.available_locales', ['en' => 'English']),
                 'timestamp' => now()->toISOString(),
             ],
         ];
