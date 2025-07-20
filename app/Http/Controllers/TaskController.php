@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use App\Services\LoggingService;
 
 class TaskController extends ApiController
 {
@@ -159,10 +160,11 @@ class TaskController extends ApiController
             // Broadcast event
             $this->eventService->broadcastTaskCreated($task);
             
-            Log::info('Task created successfully', [
+            LoggingService::logTaskOperation('task_created', [
                 'task_id' => $task->id,
-                'user_id' => $user->id,
-                'parent_id' => $task->parent_id
+                'parent_id' => $task->parent_id,
+                'status' => $task->status,
+                'priority' => $task->priority,
             ]);
             
             return response()->json([

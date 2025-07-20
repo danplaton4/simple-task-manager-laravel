@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use App\Services\LoggingService;
 
 class AuthController extends Controller
 {
@@ -34,10 +35,9 @@ class AuthController extends Controller
             // Create a token for the user
             $token = $user->createToken('auth-token', ['*'], now()->addDays(30))->plainTextToken;
 
-            Log::info('User registered successfully', [
+            LoggingService::logAuthEvent('user_registered', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'ip' => $request->ip(),
             ]);
 
             return response()->json([
@@ -84,9 +84,8 @@ class AuthController extends Controller
 
             // Check if user exists and password is correct
             if (!$user || !Hash::check($validated['password'], $user->password)) {
-                Log::warning('Login attempt failed - invalid credentials', [
+                LoggingService::logSecurityEvent('login_failed_invalid_credentials', [
                     'email' => $validated['email'],
-                    'ip' => $request->ip(),
                 ]);
 
                 throw ValidationException::withMessages([
@@ -96,10 +95,9 @@ class AuthController extends Controller
 
             // Check if user account is soft deleted
             if ($user->trashed()) {
-                Log::warning('Login attempt failed - account deactivated', [
+                LoggingService::logSecurityEvent('login_failed_account_deactivated', [
                     'email' => $validated['email'],
                     'user_id' => $user->id,
-                    'ip' => $request->ip(),
                 ]);
 
                 return response()->json([
@@ -122,11 +120,10 @@ class AuthController extends Controller
 
             $token = $user->createToken('auth-token', ['*'], $expiresAt)->plainTextToken;
 
-            Log::info('User logged in successfully', [
+            LoggingService::logAuthEvent('user_logged_in', [
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'remember' => $validated['remember'] ?? false,
-                'ip' => $request->ip(),
             ]);
 
             return response()->json([
@@ -179,10 +176,9 @@ class AuthController extends Controller
             // Revoke the current token
             $request->user()->currentAccessToken()->delete();
 
-            Log::info('User logged out successfully', [
+            LoggingService::logAuthEvent('user_logged_out', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'ip' => $request->ip(),
             ]);
 
             return response()->json([
@@ -216,10 +212,9 @@ class AuthController extends Controller
             // Revoke all tokens for the user
             $user->tokens()->delete();
 
-            Log::info('User logged out from all devices', [
+            LoggingService::logAuthEvent('user_logged_out_all_devices', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'ip' => $request->ip(),
             ]);
 
             return response()->json([
@@ -258,10 +253,9 @@ class AuthController extends Controller
             // Revoke the current token
             $currentToken->delete();
 
-            Log::info('Token refreshed successfully', [
+            LoggingService::logAuthEvent('token_refreshed', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'ip' => $request->ip(),
             ]);
 
             return response()->json([

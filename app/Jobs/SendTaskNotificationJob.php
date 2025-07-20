@@ -12,6 +12,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use App\Services\LoggingService;
 
 class SendTaskNotificationJob implements ShouldQueue
 {
@@ -49,6 +50,11 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     public function handle(): void
     {
+        LoggingService::logQueueJob('started', self::class, [
+            'task_id' => $this->task->id,
+            'action' => $this->action,
+        ]);
+        
         try {
             // Load task relationships if not already loaded
             if (!$this->task->relationLoaded('user')) {
@@ -118,18 +124,18 @@ class SendTaskNotificationJob implements ShouldQueue
                     ]);
             }
 
-            Log::info('Task notification sent successfully', [
+            LoggingService::logQueueJob('completed', self::class, [
                 'task_id' => $this->task->id,
                 'action' => $this->action,
-                'user_email' => $user->email
+                'user_email' => $user->email,
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Failed to send task notification', [
+            LoggingService::logQueueJob('failed', self::class, [
                 'task_id' => $this->task->id,
                 'action' => $this->action,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'attempt' => $this->attempts(),
             ]);
 
             // Re-throw the exception to trigger job retry
@@ -275,11 +281,11 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     public function failed(\Throwable $exception): void
     {
-        Log::error('SendTaskNotificationJob failed permanently', [
+        LoggingService::logQueueJob('failed_permanently', self::class, [
             'task_id' => $this->task->id,
             'action' => $this->action,
             'error' => $exception->getMessage(),
-            'trace' => $exception->getTraceAsString()
+            'max_attempts' => $this->tries,
         ]);
     }
 }

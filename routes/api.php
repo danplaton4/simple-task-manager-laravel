@@ -17,16 +17,11 @@ use Illuminate\Support\Facades\Route;
 // Include authentication routes
 require __DIR__.'/auth.php';
 
-// Health check endpoint
-Route::get('/health', function () {
-    return response()->json([
-        'status' => 'ok',
-        'timestamp' => now()->toISOString(),
-        'version' => config('app.version', '1.0.0'),
-        'database' => 'connected', // Could add actual DB check here
-        'cache' => 'connected', // Could add actual cache check here
-    ]);
-});
+// Health check endpoints
+Route::get('/health', [App\Http\Controllers\HealthController::class, 'index']);
+Route::get('/health/detailed', [App\Http\Controllers\HealthController::class, 'detailed']);
+Route::get('/health/redis', [App\Http\Controllers\HealthController::class, 'redis']);
+Route::get('/health/metrics', [App\Http\Controllers\HealthController::class, 'metrics']);
 
 // Locale management routes (public)
 Route::get('/locale/current', [App\Http\Controllers\LocaleController::class, 'current']);
