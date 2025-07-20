@@ -26,6 +26,7 @@ class User extends Authenticatable
         'password',
         'preferred_language',
         'timezone',
+        'notification_preferences',
     ];
 
     /**
@@ -57,6 +58,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'notification_preferences' => 'array',
         ];
     }
 
@@ -90,5 +92,79 @@ class User extends Authenticatable
     public function getTimezone(): string
     {
         return $this->timezone ?? 'UTC';
+    }
+
+    /**
+     * Get the user's notification preferences with defaults.
+     */
+    public function getNotificationPreferences(): array
+    {
+        $defaults = [
+            'email_notifications' => true,
+            'task_created' => true,
+            'task_updated' => true,
+            'task_completed' => true,
+            'task_deleted' => false,
+            'task_due_soon' => true,
+            'task_overdue' => true,
+            'daily_digest' => false,
+            'weekly_digest' => false,
+        ];
+
+        return array_merge($defaults, $this->notification_preferences ?? []);
+    }
+
+    /**
+     * Check if user wants to receive a specific type of notification.
+     */
+    public function wantsNotification(string $type): bool
+    {
+        $preferences = $this->getNotificationPreferences();
+        
+        // If email notifications are disabled, return false for all
+        if (!$preferences['email_notifications']) {
+            return false;
+        }
+        
+        return $preferences[$type] ?? false;
+    }
+
+    /**
+     * Update notification preferences.
+     */
+    public function updateNotificationPreferences(array $preferences): void
+    {
+        $currentPreferences = $this->getNotificationPreferences();
+        $updatedPreferences = array_merge($currentPreferences, $preferences);
+        
+        $this->update(['notification_preferences' => $updatedPreferences]);
+    }
+
+    /**
+     * Enable all notifications.
+     */
+    public function enableAllNotifications(): void
+    {
+        $this->updateNotificationPreferences([
+            'email_notifications' => true,
+            'task_created' => true,
+            'task_updated' => true,
+            'task_completed' => true,
+            'task_deleted' => true,
+            'task_due_soon' => true,
+            'task_overdue' => true,
+            'daily_digest' => true,
+            'weekly_digest' => true,
+        ]);
+    }
+
+    /**
+     * Disable all notifications.
+     */
+    public function disableAllNotifications(): void
+    {
+        $this->updateNotificationPreferences([
+            'email_notifications' => false,
+        ]);
     }
 }

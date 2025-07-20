@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, AuthResponse, LoginCredentials, RegisterData } from '@/types';
+import { User, LoginCredentials, RegisterData } from '@/types';
+import AuthService from '@/services/AuthService';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  error: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +30,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Check for existing authentication on app load
@@ -35,88 +39,79 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        // TODO: Validate token with API and get user data
-        // For now, just set loading to false
-        setIsLoading(false);
-      } else {
-        setIsLoading(false);
+      if (AuthService.isAuthenticated()) {
+        // Validate token with API and get user data
+        const userData = await AuthService.getCurrentUser();
+        setUser(userData);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
+      // Clear invalid token
+      AuthService.clearAuth();
+      setUser(null);
+    } finally {
       setIsLoading(false);
     }
   };
 
   const login = async (credentials: LoginCredentials) => {
     try {
-      // TODO: Replace with actual API call
-      console.log('Login attempt:', credentials);
+      setError(null);
+      setIsLoading(true);
       
-      // Simulate API response
-      const mockResponse: AuthResponse = {
-        user: {
-          id: 1,
-          name: 'Test User',
-          email: credentials.email,
-          preferred_language: 'en',
-          timezone: 'UTC',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        token: 'mock-jwt-token'
-      };
-
-      // Store token and user data
-      localStorage.setItem('auth_token', mockResponse.token);
-      setUser(mockResponse.user);
+      const response = await AuthService.login(credentials);
+      setUser(response.user);
     } catch (error) {
-      console.error('Login failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Login failed';
+      setError(errorMessage);
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const register = async (data: RegisterData) => {
     try {
-      // TODO: Replace with actual API call
-      console.log('Registration attempt:', data);
+      setError(null);
+      setIsLoading(true);
       
-      // Simulate API response
-      const mockResponse: AuthResponse = {
-        user: {
-          id: 1,
-          name: data.name,
-          email: data.email,
-          preferred_language: data.preferred_language || 'en',
-          timezone: data.timezone || 'UTC',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        token: 'mock-jwt-token'
-      };
-
-      // Store token and user data
-      localStorage.setItem('auth_token', mockResponse.token);
-      setUser(mockResponse.user);
+      const response = await AuthService.register(data);
+      setUser(response.user);
     } catch (error) {
-      console.error('Registration failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      setError(errorMessage);
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('auth_token');
-    setUser(null);
+  const logout = async () => {
+    try {
+      setIsLoading(true);
+      await AuthService.logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      setUser(null);
+      setError(null);
+      setIsLoading(false);
+    }
+  };
+
+  const clearError = () => {
+    setError(null);
   };
 
   const value: AuthContextType = {
     user,
     isAuthenticated: !!user,
     isLoading,
+    error,
     login,
     register,
-    logout
+    logout,
+    clearError
   };
 
   return (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { LoginCredentials } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -12,18 +12,15 @@ import {
   FormMessage 
 } from '@/components/ui/form';
 import { Spinner } from '@/components/ui/spinner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface LoginFormProps {
-  onSubmit: (credentials: LoginCredentials) => void;
-  loading?: boolean;
-  error?: string;
+  onSuccess?: () => void;
 }
 
-const LoginForm: React.FC<LoginFormProps> = ({
-  onSubmit,
-  loading = false,
-  error
-}) => {
+const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
+  const { login, isLoading, error, clearError } = useAuth();
+  
   const form = useForm<LoginCredentials>({
     defaultValues: {
       email: '',
@@ -31,8 +28,19 @@ const LoginForm: React.FC<LoginFormProps> = ({
     }
   });
 
-  const handleSubmit = (data: LoginCredentials) => {
-    onSubmit(data);
+  // Clear error when component mounts or form values change
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
+
+  const handleSubmit = async (data: LoginCredentials) => {
+    try {
+      await login(data);
+      onSuccess?.();
+    } catch (error) {
+      // Error is handled by AuthContext
+      console.error('Login failed:', error);
+    }
   };
 
   return (
@@ -93,9 +101,9 @@ const LoginForm: React.FC<LoginFormProps> = ({
         <Button
           type="submit"
           className="w-full"
-          disabled={loading}
+          disabled={isLoading}
         >
-          {loading && <Spinner size="sm" className="mr-2" />}
+          {isLoading && <Spinner size="sm" className="mr-2" />}
           Sign In
         </Button>
       </form>

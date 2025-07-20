@@ -7,10 +7,11 @@ const Navigation: React.FC = () => {
     { to: '/', label: 'Dashboard' },
     { to: '/tasks', label: 'Tasks' },
     { to: '/tasks/new', label: 'New Task' },
+    { to: '/demo', label: 'Demo' },
   ];
 
   return (
-    <nav className="flex space-x-6">
+    <nav className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-6">
       {navItems.map((item) => (
         <NavLink
           key={item.to}

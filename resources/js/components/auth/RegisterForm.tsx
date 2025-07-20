@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { RegisterData } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -13,18 +13,15 @@ import {
 } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface RegisterFormProps {
-  onSubmit: (data: RegisterData) => void;
-  loading?: boolean;
-  error?: string;
+  onSuccess?: () => void;
 }
 
-const RegisterForm: React.FC<RegisterFormProps> = ({
-  onSubmit,
-  loading = false,
-  error
-}) => {
+const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
+  const { register, isLoading, error, clearError } = useAuth();
+  
   const form = useForm<RegisterData>({
     defaultValues: {
       name: '',
@@ -36,8 +33,19 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
     }
   });
 
-  const handleSubmit = (data: RegisterData) => {
-    onSubmit(data);
+  // Clear error when component mounts or form values change
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
+
+  const handleSubmit = async (data: RegisterData) => {
+    try {
+      await register(data);
+      onSuccess?.();
+    } catch (error) {
+      // Error is handled by AuthContext
+      console.error('Registration failed:', error);
+    }
   };
 
   return (
@@ -172,9 +180,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
         <Button
           type="submit"
           className="w-full"
-          disabled={loading}
+          disabled={isLoading}
         >
-          {loading && <Spinner size="sm" className="mr-2" />}
+          {isLoading && <Spinner size="sm" className="mr-2" />}
           Create Account
         </Button>
       </form>

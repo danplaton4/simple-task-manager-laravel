@@ -33,6 +33,11 @@ Route::get('/locale/current', [App\Http\Controllers\LocaleController::class, 'cu
 Route::post('/locale/switch', [App\Http\Controllers\LocaleController::class, 'switch']);
 Route::get('/locale/translations', [App\Http\Controllers\LocaleController::class, 'translations']);
 
+// Unsubscribe routes (public)
+Route::get('/unsubscribe', [App\Http\Controllers\UnsubscribeController::class, 'show']);
+Route::post('/unsubscribe', [App\Http\Controllers\UnsubscribeController::class, 'unsubscribe']);
+Route::post('/unsubscribe/all', [App\Http\Controllers\UnsubscribeController::class, 'unsubscribeAll']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {

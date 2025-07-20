@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './bootstrap';
@@ -6,6 +6,9 @@ import '../css/app.css';
 
 // Context
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { TaskProvider } from '@/contexts/TaskContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { NotificationProvider } from '@/components/ui/notification';
 
 // Layout
 import { Layout, ProtectedRoute } from '@/components';
@@ -17,9 +20,10 @@ import TasksPage from '@/pages/TasksPage';
 import NewTaskPage from '@/pages/NewTaskPage';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
+import AdvancedFeaturesDemo from '@/components/examples/AdvancedFeaturesDemo';
 
 function AppRoutes() {
-    const { isAuthenticated, isLoading } = useAuth();
+    const { isLoading } = useAuth();
 
     if (isLoading) {
         return (
@@ -37,13 +41,14 @@ function AppRoutes() {
             
             {/* Protected routes */}
             <Route path="/" element={
-                <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <ProtectedRoute>
                     <Layout />
                 </ProtectedRoute>
             }>
                 <Route index element={<Dashboard />} />
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="tasks/new" element={<NewTaskPage />} />
+                <Route path="demo" element={<AdvancedFeaturesDemo />} />
             </Route>
             
             {/* Catch all route */}
@@ -54,11 +59,17 @@ function AppRoutes() {
 
 function App() {
     return (
-        <AuthProvider>
-            <Router>
-                <AppRoutes />
-            </Router>
-        </AuthProvider>
+        <ThemeProvider>
+            <NotificationProvider>
+                <AuthProvider>
+                    <TaskProvider>
+                        <Router>
+                            <AppRoutes />
+                        </Router>
+                    </TaskProvider>
+                </AuthProvider>
+            </NotificationProvider>
+        </ThemeProvider>
     );
 }
 

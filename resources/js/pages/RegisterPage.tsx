@@ -1,27 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { RegisterData } from '@/types';
 import { RegisterForm } from '@/components';
-import { useAuth } from '@/contexts/AuthContext';
 
 const RegisterPage: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
   const navigate = useNavigate();
-  const { register } = useAuth();
 
-  const handleRegister = async (data: RegisterData) => {
-    setLoading(true);
-    setError('');
-
-    try {
-      await register(data);
-      navigate('/');
-    } catch (err) {
-      setError('Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  const handleRegisterSuccess = () => {
+    navigate('/');
   };
 
   return (
@@ -43,11 +28,7 @@ const RegisterPage: React.FC = () => {
         </div>
 
         <div className="bg-card py-8 px-6 shadow-lg rounded-lg border">
-          <RegisterForm
-            onSubmit={handleRegister}
-            loading={loading}
-            error={error}
-          />
+          <RegisterForm onSuccess={handleRegisterSuccess} />
         </div>
       </div>
     </div>

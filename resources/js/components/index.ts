@@ -6,6 +6,8 @@ export { default as Navigation } from './layout/Navigation';
 // Task components
 export { default as TaskList } from './tasks/TaskList';
 export { default as TaskCard } from './tasks/TaskCard';
+export { default as DraggableTaskList } from './tasks/DraggableTaskList';
+export { default as DraggableTaskCard } from './tasks/DraggableTaskCard';
 export { default as TaskForm } from './tasks/TaskForm';
 export { default as SubtaskManager } from './tasks/SubtaskManager';
 

@@ -53,4 +53,119 @@ return [
         'server_error' => 'Interner Serverfehler',
         'not_found' => 'Ressource nicht gefunden',
     ],
+    'email' => [
+        'task_created' => [
+            'subject' => 'Neue Aufgabe erstellt: :task_name',
+            'greeting' => 'Hallo :user_name,',
+            'intro' => 'Eine neue Aufgabe wurde in Ihrem Aufgabenverwaltungssystem erstellt.',
+            'task_details' => 'Aufgabendetails:',
+            'name' => 'Name: :name',
+            'description' => 'Beschreibung: :description',
+            'status' => 'Status: :status',
+            'priority' => 'Priorität: :priority',
+            'due_date' => 'Fälligkeitsdatum: :due_date',
+            'parent_task' => 'Übergeordnete Aufgabe: :parent_name',
+            'view_task' => 'Aufgabe anzeigen',
+            'footer' => 'Vielen Dank für die Nutzung unseres Aufgabenverwaltungssystems!',
+        ],
+        'task_updated' => [
+            'subject' => 'Aufgabe aktualisiert: :task_name',
+            'greeting' => 'Hallo :user_name,',
+            'intro' => 'Eine Ihrer Aufgaben wurde aktualisiert.',
+            'task_details' => 'Aktualisierte Aufgabendetails:',
+            'name' => 'Name: :name',
+            'description' => 'Beschreibung: :description',
+            'status' => 'Status: :status',
+            'priority' => 'Priorität: :priority',
+            'due_date' => 'Fälligkeitsdatum: :due_date',
+            'parent_task' => 'Übergeordnete Aufgabe: :parent_name',
+            'view_task' => 'Aufgabe anzeigen',
+            'footer' => 'Vielen Dank für die Nutzung unseres Aufgabenverwaltungssystems!',
+        ],
+        'task_completed' => [
+            'subject' => 'Aufgabe abgeschlossen: :task_name',
+            'greeting' => 'Hallo :user_name,',
+            'intro' => 'Herzlichen Glückwunsch! Sie haben eine Aufgabe abgeschlossen.',
+            'task_details' => 'Abgeschlossene Aufgabendetails:',
+            'name' => 'Name: :name',
+            'description' => 'Beschreibung: :description',
+            'completed_at' => 'Abgeschlossen am: :completed_at',
+            'priority' => 'Priorität: :priority',
+            'due_date' => 'Fälligkeitsdatum: :due_date',
+            'parent_task' => 'Übergeordnete Aufgabe: :parent_name',
+            'view_task' => 'Aufgabe anzeigen',
+            'footer' => 'Machen Sie weiter so!',
+        ],
+        'task_deleted' => [
+            'subject' => 'Aufgabe gelöscht: :task_name',
+            'content' => 'Hallo :user_name,
+
+Ihre Aufgabe ":task_name" wurde aus Ihrem Aufgabenverwaltungssystem gelöscht.
+
+Falls dies versehentlich geschehen ist, wenden Sie sich bitte an den Support.
+
+Mit freundlichen Grüßen,
+Aufgabenverwaltungs-Team',
+        ],
+        'task_due_soon' => [
+            'subject' => 'Aufgabe bald fällig: :task_name',
+            'content' => 'Hallo :user_name,
+
+Dies ist eine Erinnerung, dass Ihre Aufgabe ":task_name" bald fällig ist.
+
+Fälligkeitsdatum: :due_date
+
+Bitte stellen Sie sicher, dass Sie sie rechtzeitig abschließen.
+
+Mit freundlichen Grüßen,
+Aufgabenverwaltungs-Team',
+        ],
+        'task_overdue' => [
+            'subject' => 'Aufgabe überfällig: :task_name',
+            'content' => 'Hallo :user_name,
+
+Ihre Aufgabe ":task_name" ist jetzt überfällig.
+
+Ursprüngliches Fälligkeitsdatum: :due_date
+Tage überfällig: :days_overdue
+
+Bitte schließen Sie diese Aufgabe so schnell wie möglich ab.
+
+Mit freundlichen Grüßen,
+Aufgabenverwaltungs-Team',
+        ],
+        'daily_digest' => [
+            'subject' => 'Tägliche Aufgabenzusammenfassung - :date',
+            'greeting' => 'Hallo :user_name,',
+            'intro' => 'Hier ist Ihre tägliche Aufgabenzusammenfassung für :period:',
+            'summary' => 'Zusammenfassung:',
+            'created_tasks' => ':count neue Aufgaben erstellt',
+            'completed_tasks' => ':count Aufgaben abgeschlossen',
+            'total_active' => ':count aktive Aufgaben verbleibend',
+            'due_soon_section' => 'Bald fällige Aufgaben:',
+            'overdue_section' => 'Überfällige Aufgaben (Handlung erforderlich):',
+            'completed_section' => 'Kürzlich abgeschlossene Aufgaben:',
+            'footer' => 'Alle Ihre Aufgaben anzeigen unter:',
+            'unsubscribe' => 'Um sich von täglichen Zusammenfassungen abzumelden, aktualisieren Sie Ihre Benachrichtigungseinstellungen in Ihren Kontoeinstellungen.',
+        ],
+        'weekly_digest' => [
+            'subject' => 'Wöchentliche Aufgabenzusammenfassung - :date',
+            'greeting' => 'Hallo :user_name,',
+            'intro' => 'Hier ist Ihre wöchentliche Aufgabenzusammenfassung für :period:',
+            'summary' => 'Zusammenfassung:',
+            'created_tasks' => ':count neue Aufgaben erstellt',
+            'completed_tasks' => ':count Aufgaben abgeschlossen',
+            'total_active' => ':count aktive Aufgaben verbleibend',
+            'due_soon_section' => 'Bald fällige Aufgaben:',
+            'overdue_section' => 'Überfällige Aufgaben (Handlung erforderlich):',
+            'completed_section' => 'Kürzlich abgeschlossene Aufgaben:',
+            'footer' => 'Alle Ihre Aufgaben anzeigen unter:',
+            'unsubscribe' => 'Um sich von wöchentlichen Zusammenfassungen abzumelden, aktualisieren Sie Ihre Benachrichtigungseinstellungen in Ihren Kontoeinstellungen.',
+        ],
+        'common' => [
+            'no_description' => 'Keine Beschreibung angegeben',
+            'no_due_date' => 'Kein Fälligkeitsdatum festgelegt',
+            'no_parent_task' => 'Dies ist eine Hauptaufgabe',
+        ],
+    ],
 ];

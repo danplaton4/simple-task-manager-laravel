@@ -76,3 +76,19 @@ export interface PaginatedResponse<T> {
   per_page: number;
   total: number;
 }
+
+export interface LoadingState {
+  isLoading: boolean;
+  error: string | null;
+}
+
+export interface OptimisticUpdate<T> {
+  id: number;
+  data: Partial<T>;
+  timestamp: number;
+}
+
+export interface BulkUpdateRequest {
+  id: number;
+  data: Partial<TaskFormData>;
+}

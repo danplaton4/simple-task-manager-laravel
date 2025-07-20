@@ -2,6 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Mail\TaskCreatedMail;
+use App\Mail\TaskUpdatedMail;
+use App\Mail\TaskCompletedMail;
 use App\Models\Task;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -72,6 +75,16 @@ class SendTaskNotificationJob implements ShouldQueue
                 'app_url' => config('app.url'),
             ];
 
+            // Check if user wants to receive this type of notification
+            if (!$user->wantsNotification('task_' . $this->action)) {
+                Log::info('User has disabled this notification type', [
+                    'task_id' => $this->task->id,
+                    'user_id' => $user->id,
+                    'action' => $this->action
+                ]);
+                return;
+            }
+
             // Send notification based on action type
             switch ($this->action) {
                 case 'created':
@@ -129,8 +142,12 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     private function sendTaskCreatedNotification(array $data): void
     {
-        $subject = "New Task Created: {$data['task']->name}";
-        $this->sendEmailNotification($data, $subject, 'task_created');
+        $task = $data['task'];
+        $user = $data['user'];
+        $locale = $user->getPreferredLanguage();
+        $taskUrl = $this->generateTaskUrl($task);
+        
+        Mail::send(new TaskCreatedMail($task, $user, $locale, $taskUrl));
     }
 
     /**
@@ -138,8 +155,13 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     private function sendTaskUpdatedNotification(array $data): void
     {
-        $subject = "Task Updated: {$data['task']->name}";
-        $this->sendEmailNotification($data, $subject, 'task_updated');
+        $task = $data['task'];
+        $user = $data['user'];
+        $locale = $user->getPreferredLanguage();
+        $taskUrl = $this->generateTaskUrl($task);
+        $changes = $data['additional_data']['changes'] ?? [];
+        
+        Mail::send(new TaskUpdatedMail($task, $user, $locale, $taskUrl, $changes));
     }
 
     /**
@@ -147,8 +169,12 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     private function sendTaskCompletedNotification(array $data): void
     {
-        $subject = "Task Completed: {$data['task']->name}";
-        $this->sendEmailNotification($data, $subject, 'task_completed');
+        $task = $data['task'];
+        $user = $data['user'];
+        $locale = $user->getPreferredLanguage();
+        $taskUrl = $this->generateTaskUrl($task);
+        
+        Mail::send(new TaskCompletedMail($task, $user, $locale, $taskUrl));
     }
 
     /**
@@ -156,8 +182,26 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     private function sendTaskDeletedNotification(array $data): void
     {
-        $subject = "Task Deleted: {$data['task']->name}";
-        $this->sendEmailNotification($data, $subject, 'task_deleted');
+        // For deleted tasks, we'll use a simple notification for now
+        // You could create a TaskDeletedMail class if needed
+        $task = $data['task'];
+        $user = $data['user'];
+        $locale = $user->getPreferredLanguage();
+        
+        $subject = __('messages.email.task_deleted.subject', [
+            'task_name' => $task->getLocalizedName($locale)
+        ], $locale);
+        
+        $content = __('messages.email.task_deleted.content', [
+            'user_name' => $user->name,
+            'task_name' => $task->getLocalizedName($locale)
+        ], $locale);
+        
+        Mail::raw($content, function ($message) use ($user, $subject) {
+            $message->to($user->email, $user->name)
+                    ->subject($subject)
+                    ->from(config('mail.from.address'), config('mail.from.name'));
+        });
     }
 
     /**
@@ -165,8 +209,27 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     private function sendTaskDueSoonNotification(array $data): void
     {
-        $subject = "Task Due Soon: {$data['task']->name}";
-        $this->sendEmailNotification($data, $subject, 'task_due_soon');
+        // For due soon notifications, we'll use a simple notification for now
+        // You could create a TaskDueSoonMail class if needed
+        $task = $data['task'];
+        $user = $data['user'];
+        $locale = $user->getPreferredLanguage();
+        
+        $subject = __('messages.email.task_due_soon.subject', [
+            'task_name' => $task->getLocalizedName($locale)
+        ], $locale);
+        
+        $content = __('messages.email.task_due_soon.content', [
+            'user_name' => $user->name,
+            'task_name' => $task->getLocalizedName($locale),
+            'due_date' => $task->due_date->setTimezone($user->getTimezone())->format('Y-m-d H:i T')
+        ], $locale);
+        
+        Mail::raw($content, function ($message) use ($user, $subject) {
+            $message->to($user->email, $user->name)
+                    ->subject($subject)
+                    ->from(config('mail.from.address'), config('mail.from.name'));
+        });
     }
 
     /**
@@ -174,81 +237,37 @@ class SendTaskNotificationJob implements ShouldQueue
      */
     private function sendTaskOverdueNotification(array $data): void
     {
-        $subject = "Task Overdue: {$data['task']->name}";
-        $this->sendEmailNotification($data, $subject, 'task_overdue');
-    }
-
-    /**
-     * Send email notification
-     */
-    private function sendEmailNotification(array $data, string $subject, string $template): void
-    {
-        // For now, we'll use a simple mail approach
-        // In a real application, you would create proper Mailable classes
+        // For overdue notifications, we'll use a simple notification for now
+        // You could create a TaskOverdueMail class if needed
+        $task = $data['task'];
+        $user = $data['user'];
+        $locale = $user->getPreferredLanguage();
         
-        $emailContent = $this->generateEmailContent($data, $template);
+        $subject = __('messages.email.task_overdue.subject', [
+            'task_name' => $task->getLocalizedName($locale)
+        ], $locale);
         
-        Mail::raw($emailContent, function ($message) use ($data, $subject) {
-            $message->to($data['user']->email, $data['user']->name)
+        $content = __('messages.email.task_overdue.content', [
+            'user_name' => $user->name,
+            'task_name' => $task->getLocalizedName($locale),
+            'due_date' => $task->due_date->setTimezone($user->getTimezone())->format('Y-m-d H:i T'),
+            'days_overdue' => $data['additional_data']['days_overdue'] ?? 0
+        ], $locale);
+        
+        Mail::raw($content, function ($message) use ($user, $subject) {
+            $message->to($user->email, $user->name)
                     ->subject($subject)
                     ->from(config('mail.from.address'), config('mail.from.name'));
         });
     }
 
     /**
-     * Generate email content based on template
+     * Generate task URL for email links
      */
-    private function generateEmailContent(array $data, string $template): string
+    private function generateTaskUrl(Task $task): string
     {
-        $task = $data['task'];
-        $user = $data['user'];
-        $action = $data['action'];
-        
-        $content = "Hello {$user->name},\n\n";
-        
-        switch ($template) {
-            case 'task_created':
-                $content .= "A new task has been created:\n\n";
-                break;
-            case 'task_updated':
-                $content .= "Your task has been updated:\n\n";
-                break;
-            case 'task_completed':
-                $content .= "Congratulations! Your task has been completed:\n\n";
-                break;
-            case 'task_deleted':
-                $content .= "Your task has been deleted:\n\n";
-                break;
-            case 'task_due_soon':
-                $content .= "Reminder: Your task is due soon:\n\n";
-                break;
-            case 'task_overdue':
-                $content .= "Alert: Your task is overdue:\n\n";
-                break;
-        }
-        
-        $content .= "Task: {$task->name}\n";
-        
-        if ($task->description) {
-            $content .= "Description: {$task->description}\n";
-        }
-        
-        $content .= "Status: {$task->status}\n";
-        $content .= "Priority: {$task->priority}\n";
-        
-        if ($task->due_date) {
-            $content .= "Due Date: {$task->due_date}\n";
-        }
-        
-        if ($task->parent_id) {
-            $content .= "Parent Task: {$task->parent->name}\n";
-        }
-        
-        $content .= "\nYou can view your tasks at: " . config('app.url') . "\n\n";
-        $content .= "Best regards,\n";
-        $content .= config('app.name') . " Team";
-        
-        return $content;
+        $frontendUrl = config('app.frontend_url', config('app.url'));
+        return "{$frontendUrl}/tasks/{$task->id}";
     }
 
     /**
