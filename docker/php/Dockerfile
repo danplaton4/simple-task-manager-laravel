@@ -19,15 +19,15 @@ RUN apk add --no-cache \
     libwebp-dev \
     icu-dev \
     postgresql-dev \
-    supervisor \
-    nginx
+    supervisor
 
 # Install Node.js and npm
 RUN apk add --no-cache nodejs npm
 
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
         pdo_mysql \
         pdo_pgsql \
         mbstring \
@@ -49,15 +49,15 @@ RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS \
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Configure PHP-FPM for production
-COPY php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
-COPY php.ini /usr/local/etc/php/php.ini
+COPY docker/php/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
+COPY docker/php/php.ini /usr/local/etc/php/php.ini
 
 # Create application directory
 WORKDIR /var/www/html
 
-# Create www-data user with proper UID/GID
-RUN addgroup -g 1000 -S www-data \
-    && adduser -u 1000 -D -S -G www-data www-data
+# Create www-data user with proper UID/GID (if not exists)
+RUN addgroup -g 1000 -S www-data || true \
+    && adduser -u 1000 -D -S -G www-data www-data || true
 
 # Copy application files
 COPY --chown=www-data:www-data . .
@@ -66,21 +66,21 @@ COPY --chown=www-data:www-data . .
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # Install Node.js dependencies and build frontend
-RUN npm ci --only=production \
+RUN npm ci \
     && npm run build \
     && rm -rf node_modules
 
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www/html \
+# Set proper permissions and create log directories
+RUN mkdir -p /var/log/supervisor \
+    && chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
 
 # Create supervisor configuration
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/php/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Switch to non-root user
-USER www-data
+# Keep running as root for supervisor
 
 # Expose port
 EXPOSE 9000
