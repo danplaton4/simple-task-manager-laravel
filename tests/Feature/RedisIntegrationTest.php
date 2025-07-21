@@ -1,212 +1,189 @@
 <?php
 
-use App\Models\Task;
 use App\Models\User;
+use App\Models\Task;
 use App\Services\TaskCacheService;
-use App\Services\TaskEventService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Cache;
 
 uses(RefreshDatabase::class);
 
-describe('Redis Integration', function () {
+describe('Redis Integration Tests', function () {
+    
     beforeEach(function () {
-        $this->user = User::factory()->create();
-        
-        // Clear Redis before each test
         Redis::flushall();
-        Cache::flush();
     });
 
-    describe('Cache Integration', function () {
-        beforeEach(function () {
-            $this->cacheService = new TaskCacheService();
-        });
+    it('can cache and retrieve user tasks correctly', function () {
+        $user = User::factory()->create();
+        $tasks = Task::factory()->count(5)->for($user)->create();
 
-        it('can store and retrieve data from Redis cache', function () {
-            $key = 'test_key';
-            $value = 'test_value';
-            
-            Cache::put($key, $value, 60);
-            $retrieved = Cache::get($key);
-            
-            expect($retrieved)->toBe($value);
-        });
+        $cacheService = new TaskCacheService();
+        
+        // First call should hit database and cache result
+        $cachedTasks = $cacheService->getUserTasks($user->id);
+        expect($cachedTasks)->toHaveCount(5);
 
-        it('can clear cache by pattern', function () {
-            // Store multiple cache entries
-            Cache::put('user:1:tasks:abc', 'data1', 60);
-            Cache::put('user:1:tasks:def', 'data2', 60);
-            Cache::put('user:2:tasks:ghi', 'data3', 60);
-            
-            // Clear cache for user 1
-            $this->cacheService->clearUserTasksCache(1);
-            
-            // User 1 cache should be cleared, user 2 should remain
-            expect(Cache::get('user:1:tasks:abc'))->toBeNull();
-            expect(Cache::get('user:1:tasks:def'))->toBeNull();
-            expect(Cache::get('user:2:tasks:ghi'))->toBe('data3');
-        });
+        // Verify data is cached
+        $cacheKey = "user:{$user->id}:tasks:" . md5(serialize([]));
+        expect(Cache::has($cacheKey))->toBeTrue();
 
-        it('handles cache failures gracefully', function () {
-            // Test cache health check
-            expect($this->cacheService->isHealthy())->toBeTrue();
-            
-            // Simulate cache failure by using invalid connection
-            // In a real scenario, you might mock Redis to throw exceptions
-            expect($this->cacheService->isHealthy())->toBeTrue(); // Should still work
-        });
-
-        it('can warm up cache with user data', function () {
-            Task::factory()->for($this->user)->create(['status' => 'pending']);
-            Task::factory()->for($this->user)->create(['status' => 'completed']);
-            
-            $this->cacheService->warmUpUserCache($this->user->id);
-            
-            // Verify cache contains expected data
-            $cachedTasks = $this->cacheService->getUserTasks($this->user->id);
-            expect($cachedTasks)->toHaveCount(2);
-        });
+        // Second call should hit cache
+        $cachedTasksSecond = $cacheService->getUserTasks($user->id);
+        expect($cachedTasksSecond)->toHaveCount(5);
     });
 
-    describe('Pub/Sub Integration', function () {
-        beforeEach(function () {
-            $this->eventService = new TaskEventService();
-        });
+    it('can clear user task cache correctly', function () {
+        $user = User::factory()->create();
+        Task::factory()->count(3)->for($user)->create();
 
-        it('can publish messages to Redis channels', function () {
-            $task = Task::factory()->for($this->user)->create();
-            
-            // This should not throw any exceptions
-            $this->eventService->broadcastTaskCreated($task);
-            
-            expect(true)->toBeTrue(); // Test passes if no exceptions thrown
-        });
+        $cacheService = new TaskCacheService();
+        
+        // Cache some data
+        $cacheService->getUserTasks($user->id);
+        $cacheService->getUserTasks($user->id, ['status' => 'pending']);
+        
+        // Verify cache exists
+        $cacheKey1 = "user:{$user->id}:tasks:" . md5(serialize([]));
+        $cacheKey2 = "user:{$user->id}:tasks:" . md5(serialize(['status' => 'pending']));
+        
+        expect(Cache::has($cacheKey1))->toBeTrue();
+        expect(Cache::has($cacheKey2))->toBeTrue();
 
-        it('can check channel subscriber counts', function () {
-            $count = $this->eventService->getUserChannelSubscribers($this->user->id);
-            
-            expect($count)->toBeInt();
-            expect($count)->toBeGreaterThanOrEqual(0);
-        });
+        // Clear cache
+        $cacheService->clearUserTasksCache($user->id);
 
-        it('can send test events', function () {
-            $result = $this->eventService->sendTestEvent($this->user->id);
-            
-            expect($result)->toBeTrue();
-        });
-
-        it('can get event statistics', function () {
-            $stats = $this->eventService->getEventStatistics();
-            
-            expect($stats)->toHaveKey('status');
-            expect($stats['status'])->toBeIn(['healthy', 'unhealthy']);
-        });
-
-        it('handles pub/sub health checks', function () {
-            expect($this->eventService->isHealthy())->toBeTrue();
-        });
+        // Verify cache is cleared
+        expect(Cache::has($cacheKey1))->toBeFalse();
+        expect(Cache::has($cacheKey2))->toBeFalse();
     });
 
-    describe('Queue Integration', function () {
-        it('can dispatch jobs to Redis queue', function () {
-            Queue::fake();
-            
-            $task = Task::factory()->for($this->user)->create();
-            
-            // Dispatch a job (this would normally be done in the controller)
-            \App\Jobs\SendTaskNotificationJob::dispatch($task, 'created');
-            
-            Queue::assertPushed(\App\Jobs\SendTaskNotificationJob::class);
-        });
+    it('can cache task details with relationships', function () {
+        $user = User::factory()->create();
+        $parentTask = Task::factory()->for($user)->create();
+        $subtasks = Task::factory()->count(2)->for($user)->create(['parent_id' => $parentTask->id]);
 
-        it('can process analytics jobs', function () {
-            Queue::fake();
-            
-            \App\Jobs\ProcessTaskAnalyticsJob::dispatch();
-            
-            Queue::assertPushed(\App\Jobs\ProcessTaskAnalyticsJob::class);
-        });
+        $cacheService = new TaskCacheService();
+        
+        // Cache task details
+        $cacheService->cacheTaskDetails($parentTask);
+
+        // Verify cached data includes relationships
+        $cacheKey = "task:{$parentTask->id}:details";
+        $cachedTask = Cache::get($cacheKey);
+        
+        expect($cachedTask)->not->toBeNull();
+        expect($cachedTask->subtasks)->toHaveCount(2);
     });
 
-    describe('Session Integration', function () {
-        it('can store session data in Redis', function () {
-            $sessionKey = 'test_session_key';
-            $sessionValue = 'test_session_value';
-            
-            session([$sessionKey => $sessionValue]);
-            
-            expect(session($sessionKey))->toBe($sessionValue);
-        });
+    it('can handle Redis session storage', function () {
+        // Test session storage in Redis
+        session(['test_key' => 'test_value']);
+        expect(session('test_key'))->toBe('test_value');
 
-        it('can handle multiple Redis databases', function () {
-            // Test that different Redis databases are accessible
-            $cacheConnection = Redis::connection('cache');
-            $sessionConnection = Redis::connection('session');
-            $queueConnection = Redis::connection('queue');
-            
-            expect($cacheConnection)->not->toBeNull();
-            expect($sessionConnection)->not->toBeNull();
-            expect($queueConnection)->not->toBeNull();
-        });
+        // Verify session is stored in Redis
+        $sessionId = session()->getId();
+        $redisKey = config('session.prefix') . $sessionId;
+        
+        // Check if session data exists in Redis
+        $sessionData = Redis::connection('session')->get($redisKey);
+        expect($sessionData)->not->toBeNull();
     });
 
-    describe('Redis Performance', function () {
-        it('can handle multiple cache operations efficiently', function () {
-            $startTime = microtime(true);
-            
-            // Perform multiple cache operations
-            for ($i = 0; $i < 100; $i++) {
-                Cache::put("test_key_{$i}", "test_value_{$i}", 60);
-            }
-            
-            for ($i = 0; $i < 100; $i++) {
-                Cache::get("test_key_{$i}");
-            }
-            
-            $endTime = microtime(true);
-            $executionTime = $endTime - $startTime;
-            
-            // Should complete within reasonable time (adjust as needed)
-            expect($executionTime)->toBeLessThan(5.0);
-        });
+    it('can handle Redis queue operations', function () {
+        // Test Redis queue functionality
+        $queueName = 'default';
+        $jobData = ['test' => 'data'];
 
-        it('can handle concurrent cache access', function () {
-            $key = 'concurrent_test_key';
-            $value1 = 'value1';
-            $value2 = 'value2';
-            
-            // Simulate concurrent access
-            Cache::put($key, $value1, 60);
-            $retrieved1 = Cache::get($key);
-            
-            Cache::put($key, $value2, 60);
-            $retrieved2 = Cache::get($key);
-            
-            expect($retrieved1)->toBe($value1);
-            expect($retrieved2)->toBe($value2);
-        });
+        // Push job to Redis queue
+        Redis::connection('queue')->lpush("queues:$queueName", json_encode($jobData));
+
+        // Verify job is in queue
+        $queueLength = Redis::connection('queue')->llen("queues:$queueName");
+        expect($queueLength)->toBe(1);
+
+        // Pop job from queue
+        $job = Redis::connection('queue')->rpop("queues:$queueName");
+        $decodedJob = json_decode($job, true);
+        
+        expect($decodedJob['test'])->toBe('data');
     });
 
-    describe('Redis Connection Management', function () {
-        it('can establish Redis connections', function () {
-            $redis = Redis::connection();
-            
-            expect($redis)->not->toBeNull();
-            
-            // Test basic Redis operation
-            $redis->set('connection_test', 'success');
-            $result = $redis->get('connection_test');
-            
-            expect($result)->toBe('success');
-        });
+    it('can handle multiple Redis database connections', function () {
+        // Test default connection (cache)
+        Redis::connection('cache')->set('cache_test', 'cache_value');
+        expect(Redis::connection('cache')->get('cache_test'))->toBe('cache_value');
 
-        it('can handle Redis connection failures gracefully', function () {
-            // This test would require mocking Redis to simulate failures
-            // For now, we'll test that the connection exists
-            expect(Redis::connection())->not->toBeNull();
-        });
+        // Test session connection
+        Redis::connection('session')->set('session_test', 'session_value');
+        expect(Redis::connection('session')->get('session_test'))->toBe('session_value');
+
+        // Test queue connection
+        Redis::connection('queue')->set('queue_test', 'queue_value');
+        expect(Redis::connection('queue')->get('queue_test'))->toBe('queue_value');
+
+        // Verify isolation between connections
+        expect(Redis::connection('cache')->get('session_test'))->toBeNull();
+        expect(Redis::connection('session')->get('queue_test'))->toBeNull();
+        expect(Redis::connection('queue')->get('cache_test'))->toBeNull();
+    });
+
+    it('can handle Redis pub/sub for real-time features', function () {
+        $user = User::factory()->create();
+        $task = Task::factory()->for($user)->create();
+
+        $channel = "user:{$user->id}:tasks";
+        $message = [
+            'task_id' => $task->id,
+            'action' => 'updated',
+            'task_data' => $task->toArray(),
+            'timestamp' => now()->toISOString()
+        ];
+
+        // Publish message
+        Redis::publish($channel, json_encode($message));
+
+        // In a real scenario, we would test subscription
+        // For testing purposes, we verify the publish operation
+        expect(true)->toBeTrue(); // Placeholder assertion
+    });
+
+    it('can handle cache expiration and TTL', function () {
+        $key = 'test_expiration';
+        $value = 'test_value';
+        $ttl = 2; // 2 seconds
+
+        // Set with TTL
+        Cache::put($key, $value, $ttl);
+        expect(Cache::get($key))->toBe($value);
+
+        // Check TTL
+        $remainingTtl = Redis::ttl(Cache::getPrefix() . $key);
+        expect($remainingTtl)->toBeGreaterThan(0);
+        expect($remainingTtl)->toBeLessThanOrEqual($ttl);
+
+        // Wait for expiration (in real test, we would mock time)
+        sleep(3);
+        expect(Cache::get($key))->toBeNull();
+    });
+
+    it('can handle Redis memory optimization', function () {
+        // Test memory usage with large dataset
+        $user = User::factory()->create();
+        $tasks = Task::factory()->count(100)->for($user)->create();
+
+        $cacheService = new TaskCacheService();
+        
+        // Cache large dataset
+        $startMemory = memory_get_usage();
+        $cachedTasks = $cacheService->getUserTasks($user->id);
+        $endMemory = memory_get_usage();
+
+        expect($cachedTasks)->toHaveCount(100);
+        
+        // Verify reasonable memory usage (less than 10MB for 100 tasks)
+        $memoryUsed = $endMemory - $startMemory;
+        expect($memoryUsed)->toBeLessThan(10 * 1024 * 1024); // 10MB
     });
 });

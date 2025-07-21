@@ -20,6 +20,16 @@ class TaskCacheService
     private const TASK_DETAILS_CACHE_DURATION = 600;
 
     /**
+     * Cache duration for user statistics (15 minutes)
+     */
+    private const USER_STATS_CACHE_DURATION = 900;
+
+    /**
+     * Cache duration for frequently accessed data (30 minutes)
+     */
+    private const FREQUENT_ACCESS_CACHE_DURATION = 1800;
+
+    /**
      * Get cached user tasks with optional filters
      *
      * @param int $userId
@@ -167,7 +177,7 @@ class TaskCacheService
     {
         $cacheKey = $this->generateUserStatsKey($userId);
         
-        return Cache::remember($cacheKey, self::CACHE_DURATION, function () use ($userId) {
+        return Cache::remember($cacheKey, self::USER_STATS_CACHE_DURATION, function () use ($userId) {
             $tasks = Task::where('user_id', $userId);
             
             return [

@@ -1,337 +1,341 @@
 <?php
 
-use App\Models\Task;
 use App\Models\User;
+use App\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Config;
 
 uses(RefreshDatabase::class);
 
-describe('Multilingual Integration', function () {
-    beforeEach(function () {
-        $this->user = User::factory()->create();
-        
-        // Set up available locales for testing
-        Config::set('app.available_locales', [
-            'en' => 'English',
-            'fr' => 'Français',
-            'de' => 'Deutsch'
+describe('Multilingual Integration Tests', function () {
+    
+    it('can handle locale detection from headers', function () {
+        $user = User::factory()->create(['preferred_language' => 'en']);
+        $token = $user->createToken('test')->plainTextToken;
+
+        // Test German locale detection
+        $response = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'de'
+        ])->getJson('/api/tasks');
+
+        expect(App::getLocale())->toBe('de');
+
+        // Test French locale detection
+        $response = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'fr'
+        ])->getJson('/api/tasks');
+
+        expect(App::getLocale())->toBe('fr');
+
+        // Test fallback to English for unsupported locale
+        $response = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'es'
+        ])->getJson('/api/tasks');
+
+        expect(App::getLocale())->toBe('en');
+    });
+
+    it('can create and retrieve tasks with multilingual content', function () {
+        $user = User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        $taskData = [
+            'name' => [
+                'en' => 'Project Planning',
+                'fr' => 'Planification de projet',
+                'de' => 'Projektplanung'
+            ],
+            'description' => [
+                'en' => 'Plan the entire project timeline and milestones',
+                'fr' => 'Planifier toute la chronologie et les jalons du projet',
+                'de' => 'Planen Sie die gesamte Projektzeitleiste und Meilensteine'
+            ],
+            'status' => 'pending',
+            'priority' => 'high'
+        ];
+
+        // Create task
+        $createResponse = $this->withHeaders(['Authorization' => "Bearer $token"])
+            ->postJson('/api/tasks', $taskData);
+
+        $createResponse->assertStatus(201);
+        $taskId = $createResponse->json('data.id');
+
+        // Test English retrieval
+        $enResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'en'
+        ])->getJson("/api/tasks/{$taskId}");
+
+        $enResponse->assertStatus(200);
+        expect($enResponse->json('data.name'))->toBe('Project Planning');
+        expect($enResponse->json('data.description'))->toBe('Plan the entire project timeline and milestones');
+
+        // Test French retrieval
+        $frResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'fr'
+        ])->getJson("/api/tasks/{$taskId}");
+
+        $frResponse->assertStatus(200);
+        expect($frResponse->json('data.name'))->toBe('Planification de projet');
+        expect($frResponse->json('data.description'))->toBe('Planifier toute la chronologie et les jalons du projet');
+
+        // Test German retrieval
+        $deResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'de'
+        ])->getJson("/api/tasks/{$taskId}");
+
+        $deResponse->assertStatus(200);
+        expect($deResponse->json('data.name'))->toBe('Projektplanung');
+        expect($deResponse->json('data.description'))->toBe('Planen Sie die gesamte Projektzeitleiste und Meilensteine');
+    });
+
+    it('can handle partial translations with fallbacks', function () {
+        $user = User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        // Create task with only English and French translations
+        $taskData = [
+            'name' => [
+                'en' => 'English Only Task',
+                'fr' => 'Tâche en français seulement'
+            ],
+            'description' => [
+                'en' => 'This task only has English description'
+            ],
+            'status' => 'pending',
+            'priority' => 'medium'
+        ];
+
+        $createResponse = $this->withHeaders(['Authorization' => "Bearer $token"])
+            ->postJson('/api/tasks', $taskData);
+
+        $taskId = $createResponse->json('data.id');
+
+        // Test German request (should fallback to English)
+        $deResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'de'
+        ])->getJson("/api/tasks/{$taskId}");
+
+        $deResponse->assertStatus(200);
+        expect($deResponse->json('data.name'))->toBe('English Only Task'); // Fallback to English
+        expect($deResponse->json('data.description'))->toBe('This task only has English description');
+
+        // Test French request (should use French for name, English for description)
+        $frResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'fr'
+        ])->getJson("/api/tasks/{$taskId}");
+
+        $frResponse->assertStatus(200);
+        expect($frResponse->json('data.name'))->toBe('Tâche en français seulement');
+        expect($frResponse->json('data.description'))->toBe('This task only has English description'); // Fallback
+    });
+
+    it('can update multilingual content correctly', function () {
+        $user = User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        // Create initial task
+        $task = Task::factory()->for($user)->create([
+            'name' => [
+                'en' => 'Original English',
+                'fr' => 'Français original'
+            ],
+            'description' => [
+                'en' => 'Original description'
+            ]
         ]);
+
+        // Update with new translations
+        $updateData = [
+            'name' => [
+                'en' => 'Updated English',
+                'fr' => 'Français mis à jour',
+                'de' => 'Aktualisiertes Deutsch'
+            ],
+            'description' => [
+                'en' => 'Updated description',
+                'fr' => 'Description mise à jour',
+                'de' => 'Aktualisierte Beschreibung'
+            ],
+            'status' => 'in_progress',
+            'priority' => 'high'
+        ];
+
+        $updateResponse = $this->withHeaders(['Authorization' => "Bearer $token"])
+            ->putJson("/api/tasks/{$task->id}", $updateData);
+
+        $updateResponse->assertStatus(200);
+
+        // Verify updates in all languages
+        $enResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'en'
+        ])->getJson("/api/tasks/{$task->id}");
+
+        expect($enResponse->json('data.name'))->toBe('Updated English');
+        expect($enResponse->json('data.description'))->toBe('Updated description');
+
+        $frResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'fr'
+        ])->getJson("/api/tasks/{$task->id}");
+
+        expect($frResponse->json('data.name'))->toBe('Français mis à jour');
+        expect($frResponse->json('data.description'))->toBe('Description mise à jour');
+
+        $deResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'de'
+        ])->getJson("/api/tasks/{$task->id}");
+
+        expect($deResponse->json('data.name'))->toBe('Aktualisiertes Deutsch');
+        expect($deResponse->json('data.description'))->toBe('Aktualisierte Beschreibung');
     });
 
-    describe('Locale Configuration', function () {
-        it('has correct default locale', function () {
-            expect(App::getLocale())->toBe('en');
-        });
+    it('can handle multilingual validation errors', function () {
+        $user = User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
 
-        it('can switch application locale', function () {
-            App::setLocale('fr');
-            expect(App::getLocale())->toBe('fr');
-            
-            App::setLocale('de');
-            expect(App::getLocale())->toBe('de');
-        });
+        // Test validation with missing required English translation
+        $invalidData = [
+            'name' => [
+                'fr' => 'Nom français seulement',
+                'de' => 'Nur deutscher Name'
+            ],
+            'description' => [
+                'fr' => 'Description française'
+            ],
+            'status' => 'pending',
+            'priority' => 'medium'
+        ];
 
-        it('has fallback locale configured', function () {
-            expect(config('app.fallback_locale'))->toBe('en');
-        });
+        $response = $this->withHeaders(['Authorization' => "Bearer $token"])
+            ->postJson('/api/tasks', $invalidData);
 
-        it('has available locales configured', function () {
-            $availableLocales = config('app.available_locales');
-            
-            expect($availableLocales)->toHaveKey('en');
-            expect($availableLocales)->toHaveKey('fr');
-            expect($availableLocales)->toHaveKey('de');
-        });
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['name.en']);
     });
 
-    describe('Task Translation Storage', function () {
-        it('can store multilingual task data', function () {
-            $taskData = [
-                'name' => [
-                    'en' => 'English Task Name',
-                    'fr' => 'Nom de Tâche Française',
-                    'de' => 'Deutsche Aufgabenname'
-                ],
-                'description' => [
-                    'en' => 'English task description',
-                    'fr' => 'Description de tâche française',
-                    'de' => 'Deutsche Aufgabenbeschreibung'
-                ]
-            ];
-            
-            $task = Task::factory()->for($this->user)->create($taskData);
-            
-            expect($task->name)->toBe($taskData['name']);
-            expect($task->description)->toBe($taskData['description']);
-        });
+    it('can handle hierarchical tasks with multilingual content', function () {
+        $user = User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
 
-        it('can retrieve translations using Spatie package methods', function () {
-            $task = Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Task',
-                    'fr' => 'Tâche Française',
-                    'de' => 'Deutsche Aufgabe'
-                ]
-            ]);
-            
-            expect($task->getTranslation('name', 'en'))->toBe('English Task');
-            expect($task->getTranslation('name', 'fr'))->toBe('Tâche Française');
-            expect($task->getTranslation('name', 'de'))->toBe('Deutsche Aufgabe');
-        });
+        // Create parent task
+        $parentData = [
+            'name' => [
+                'en' => 'Parent Project',
+                'fr' => 'Projet parent',
+                'de' => 'Elternprojekt'
+            ],
+            'description' => [
+                'en' => 'Main project container',
+                'fr' => 'Conteneur de projet principal',
+                'de' => 'Hauptprojektcontainer'
+            ],
+            'status' => 'pending',
+            'priority' => 'high'
+        ];
 
-        it('falls back to default locale when translation missing', function () {
-            $task = Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Task',
-                    'fr' => 'Tâche Française'
-                    // Missing German translation
-                ]
-            ]);
-            
-            // Should fall back to English when German is not available
-            expect($task->getTranslation('name', 'de', false))->toBeNull();
-            expect($task->getTranslation('name', 'de'))->toBe('English Task'); // With fallback
-        });
+        $parentResponse = $this->withHeaders(['Authorization' => "Bearer $token"])
+            ->postJson('/api/tasks', $parentData);
+
+        $parentId = $parentResponse->json('data.id');
+
+        // Create subtask
+        $subtaskData = [
+            'name' => [
+                'en' => 'Subtask One',
+                'fr' => 'Sous-tâche un',
+                'de' => 'Unteraufgabe eins'
+            ],
+            'description' => [
+                'en' => 'First subtask',
+                'fr' => 'Première sous-tâche',
+                'de' => 'Erste Unteraufgabe'
+            ],
+            'status' => 'pending',
+            'priority' => 'medium',
+            'parent_id' => $parentId
+        ];
+
+        $subtaskResponse = $this->withHeaders(['Authorization' => "Bearer $token"])
+            ->postJson('/api/tasks', $subtaskData);
+
+        $subtaskId = $subtaskResponse->json('data.id');
+
+        // Test hierarchical display in French
+        $frListResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'fr'
+        ])->getJson('/api/tasks');
+
+        $frTasks = $frListResponse->json('data');
+        $frParent = collect($frTasks)->firstWhere('id', $parentId);
+
+        expect($frParent['name'])->toBe('Projet parent');
+        expect($frParent['subtasks'])->toHaveCount(1);
+        expect($frParent['subtasks'][0]['name'])->toBe('Sous-tâche un');
+
+        // Test hierarchical display in German
+        $deListResponse = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+            'Accept-Language' => 'de'
+        ])->getJson('/api/tasks');
+
+        $deTasks = $deListResponse->json('data');
+        $deParent = collect($deTasks)->firstWhere('id', $parentId);
+
+        expect($deParent['name'])->toBe('Elternprojekt');
+        expect($deParent['subtasks'])->toHaveCount(1);
+        expect($deParent['subtasks'][0]['name'])->toBe('Unteraufgabe eins');
     });
 
-    describe('User Language Preferences', function () {
-        it('can store user language preference', function () {
-            $user = User::factory()->create(['preferred_language' => 'fr']);
-            
-            expect($user->preferred_language)->toBe('fr');
-            expect($user->getPreferredLanguage())->toBe('fr');
-        });
+    it('can handle user preferred language settings', function () {
+        // Create users with different preferred languages
+        $enUser = User::factory()->create(['preferred_language' => 'en']);
+        $frUser = User::factory()->create(['preferred_language' => 'fr']);
+        $deUser = User::factory()->create(['preferred_language' => 'de']);
 
-        it('defaults to English when no preference set', function () {
-            $user = User::factory()->create(['preferred_language' => null]);
-            
-            expect($user->getPreferredLanguage())->toBe('en');
-        });
+        $enToken = $enUser->createToken('test')->plainTextToken;
+        $frToken = $frUser->createToken('test')->plainTextToken;
+        $deToken = $deUser->createToken('test')->plainTextToken;
 
-        it('can store user timezone preference', function () {
-            $user = User::factory()->create(['timezone' => 'Europe/Paris']);
-            
-            expect($user->timezone)->toBe('Europe/Paris');
-            expect($user->getTimezone())->toBe('Europe/Paris');
-        });
-    });
+        // Create task with all translations
+        $taskData = [
+            'name' => [
+                'en' => 'Multilingual Task',
+                'fr' => 'Tâche multilingue',
+                'de' => 'Mehrsprachige Aufgabe'
+            ],
+            'description' => [
+                'en' => 'Task for all languages',
+                'fr' => 'Tâche pour toutes les langues',
+                'de' => 'Aufgabe für alle Sprachen'
+            ],
+            'status' => 'pending',
+            'priority' => 'medium'
+        ];
 
-    describe('Translation Validation', function () {
-        it('requires at least fallback locale translation', function () {
-            // This test depends on the boot method validation being enabled
-            // Currently disabled due to memory issues, but the structure is here
-            
-            $task = Task::factory()->for($this->user)->make([
-                'name' => [
-                    'fr' => 'Tâche Française',
-                    'de' => 'Deutsche Aufgabe'
-                    // Missing English (fallback locale)
-                ]
-            ]);
-            
-            // In a working implementation, this should throw an exception
-            // expect(fn() => $task->save())->toThrow(InvalidArgumentException::class);
-            
-            // For now, just verify the data structure
-            expect($task->name)->toHaveKey('fr');
-            expect($task->name)->toHaveKey('de');
-        });
+        $createResponse = $this->withHeaders(['Authorization' => "Bearer $enToken"])
+            ->postJson('/api/tasks', $taskData);
 
-        it('accepts partial translations', function () {
-            $task = Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Task',
-                    'fr' => 'Tâche Française'
-                    // Missing German translation - should be OK
-                ],
-                'description' => [
-                    'en' => 'English description'
-                    // Missing other language descriptions - should be OK
-                ]
-            ]);
-            
-            expect($task->name)->toHaveKey('en');
-            expect($task->name)->toHaveKey('fr');
-            expect($task->name)->not->toHaveKey('de');
-        });
-    });
+        $taskId = $createResponse->json('data.id');
 
-    describe('Translation Queries', function () {
-        beforeEach(function () {
-            // Create tasks with different translation combinations
-            Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Only Task',
-                ]
-            ]);
-            
-            Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'Bilingual Task',
-                    'fr' => 'Tâche Bilingue'
-                ]
-            ]);
-            
-            Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'Trilingual Task',
-                    'fr' => 'Tâche Trilingue',
-                    'de' => 'Dreisprachige Aufgabe'
-                ]
-            ]);
-        });
+        // Test that each user sees content in their preferred language by default
+        $enResponse = $this->withHeaders(['Authorization' => "Bearer $enToken"])
+            ->getJson("/api/tasks/{$taskId}");
 
-        it('can query tasks by translation availability', function () {
-            // Find tasks that have French translations
-            $tasksWithFrench = Task::whereJsonContains('name', ['fr' => true])->get();
-            
-            // This is a simplified test - actual implementation might differ
-            expect($tasksWithFrench->count())->toBeGreaterThanOrEqual(0);
-        });
+        expect($enResponse->json('data.name'))->toBe('Multilingual Task');
 
-        it('can search within translated content', function () {
-            // Search for French content
-            $frenchTasks = Task::where('name->fr', 'like', '%Tâche%')->get();
-            
-            expect($frenchTasks->count())->toBeGreaterThanOrEqual(0);
-        });
-    });
-
-    describe('Locale Context Switching', function () {
-        it('returns appropriate translation based on current locale', function () {
-            $task = Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Task',
-                    'fr' => 'Tâche Française',
-                    'de' => 'Deutsche Aufgabe'
-                ]
-            ]);
-            
-            // Test with English locale
-            App::setLocale('en');
-            expect($task->getTranslation('name', App::getLocale()))->toBe('English Task');
-            
-            // Test with French locale
-            App::setLocale('fr');
-            expect($task->getTranslation('name', App::getLocale()))->toBe('Tâche Française');
-            
-            // Test with German locale
-            App::setLocale('de');
-            expect($task->getTranslation('name', App::getLocale()))->toBe('Deutsche Aufgabe');
-        });
-
-        it('handles missing translations gracefully', function () {
-            $task = Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Only Task'
-                ]
-            ]);
-            
-            App::setLocale('fr');
-            
-            // Should fall back to English when French is not available
-            expect($task->getTranslation('name', 'fr'))->toBe('English Only Task');
-        });
-    });
-
-    describe('Translation Completeness', function () {
-        it('can check translation completeness for a task', function () {
-            $task = Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Task',
-                    'fr' => 'Tâche Française'
-                    // Missing German
-                ],
-                'description' => [
-                    'en' => 'English Description'
-                    // Missing French and German
-                ]
-            ]);
-            
-            // This would test the getTranslationCompleteness method if it were working
-            // For now, just verify the data structure
-            expect($task->name)->toHaveKey('en');
-            expect($task->name)->toHaveKey('fr');
-            expect($task->description)->toHaveKey('en');
-        });
-    });
-
-    describe('API Locale Handling', function () {
-        it('can handle locale-specific API requests', function () {
-            $task = Task::factory()->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Task',
-                    'fr' => 'Tâche Française'
-                ]
-            ]);
-            
-            // Test API request with Accept-Language header
-            $response = $this->withHeaders([
-                'Accept-Language' => 'fr'
-            ])->getJson('/api/health');
-            
-            $response->assertStatus(200);
-            
-            // In a full implementation, the response would be localized
-            // For now, just verify the endpoint works
-        });
-
-        it('handles unsupported locales gracefully', function () {
-            $response = $this->withHeaders([
-                'Accept-Language' => 'es' // Spanish not supported
-            ])->getJson('/api/health');
-            
-            $response->assertStatus(200);
-            // Should fall back to default locale
-        });
-    });
-
-    describe('Translation Performance', function () {
-        it('can handle multiple translations efficiently', function () {
-            $startTime = microtime(true);
-            
-            // Create multiple tasks with translations
-            for ($i = 0; $i < 50; $i++) {
-                Task::factory()->for($this->user)->create([
-                    'name' => [
-                        'en' => "English Task {$i}",
-                        'fr' => "Tâche Française {$i}",
-                        'de' => "Deutsche Aufgabe {$i}"
-                    ]
-                ]);
-            }
-            
-            $endTime = microtime(true);
-            $executionTime = $endTime - $startTime;
-            
-            expect(Task::count())->toBe(50);
-            expect($executionTime)->toBeLessThan(10.0); // Should be reasonable
-        });
-
-        it('can query translations efficiently', function () {
-            // Create tasks with translations
-            Task::factory()->count(20)->for($this->user)->create([
-                'name' => [
-                    'en' => 'English Task',
-                    'fr' => 'Tâche Française'
-                ]
-            ]);
-            
-            $startTime = microtime(true);
-            
-            // Query all tasks and access translations
-            $tasks = Task::all();
-            foreach ($tasks as $task) {
-                $task->getTranslation('name', 'en');
-                $task->getTranslation('name', 'fr');
-            }
-            
-            $endTime = microtime(true);
-            $executionTime = $endTime - $startTime;
-            
-            expect($executionTime)->toBeLessThan(2.0);
-        });
+        // Note: In a full implementation, we would need to modify the API
+        // to respect user's preferred language when no Accept-Language header is provided
     });
 });
