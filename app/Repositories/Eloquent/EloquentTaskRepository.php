@@ -35,7 +35,18 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
      */
     public function updateFromDTO(Task $task, UpdateTaskDTO $dto): Task
     {
-        $task->update($dto->toModelData());
+        $data = $dto->toModelData();
+        // Handle translations with Spatie methods
+        if (isset($data['name'])) {
+            $task->setTranslations('name', $data['name']);
+            unset($data['name']);
+        }
+        if (isset($data['description'])) {
+            $task->setTranslations('description', $data['description']);
+            unset($data['description']);
+        }
+        $task->fill($data);
+        $task->save();
         return $task->fresh();
     }
 
@@ -173,11 +184,11 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
         return $this->model->where('user_id', $user->id)
             ->where(function ($q) use ($query) {
                 $q->whereJsonContains('name->en', $query)
-                  ->orWhereJsonContains('description->en', $query)
-                  ->orWhereJsonContains('name->de', $query)
-                  ->orWhereJsonContains('description->de', $query)
-                  ->orWhereJsonContains('name->fr', $query)
-                  ->orWhereJsonContains('description->fr', $query);
+                    ->orWhereJsonContains('description->en', $query)
+                    ->orWhereJsonContains('name->de', $query)
+                    ->orWhereJsonContains('description->de', $query)
+                    ->orWhereJsonContains('name->fr', $query)
+                    ->orWhereJsonContains('description->fr', $query);
             })
             ->orderBy('created_at', 'desc')
             ->get();
@@ -200,10 +211,10 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
     public function getTaskStatistics(User $user): array
     {
         $cacheKey = "user:{$user->id}:task_stats";
-        
+
         return Cache::remember($cacheKey, 300, function () use ($user) {
             $baseQuery = $this->model->where('user_id', $user->id);
-            
+
             return [
                 'total' => $baseQuery->count(),
                 'pending' => $baseQuery->where('status', Task::STATUS_PENDING)->count(),
@@ -236,7 +247,7 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
     public function getCachedTasksForUser(User $user, TaskFilterDTO $filter): Collection
     {
         $cacheKey = $filter->getCacheKey($user->id);
-        
+
         return Cache::remember($cacheKey, 300, function () use ($user, $filter) {
             return $this->getTasksForUser($user, $filter);
         });
@@ -248,7 +259,7 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
     public function clearTaskCache(User $user): void
     {
         $pattern = "user:{$user->id}:tasks:*";
-        
+
         // In a real implementation, you'd use Redis SCAN or similar
         // For now, we'll clear the statistics cache
         $this->clearTaskStatisticsCache($user);
@@ -284,11 +295,11 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
                 $query->where(function ($q) {
                     // Due today
                     $q->whereDate('due_date', today())
-                      ->where('status', '!=', Task::STATUS_COMPLETED);
+                        ->where('status', '!=', Task::STATUS_COMPLETED);
                 })->orWhere(function ($q) {
                     // Overdue
                     $q->where('due_date', '<', now())
-                      ->where('status', '!=', Task::STATUS_COMPLETED);
+                        ->where('status', '!=', Task::STATUS_COMPLETED);
                 });
             })
             ->orderBy('due_date', 'asc')
@@ -330,17 +341,37 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
             $query->where('due_date', '<=', $filter->dueDateTo);
         }
 
-        // Search filter
+        // Search filter with locale-aware functionality
         if ($filter->hasSearch()) {
             $searchTerm = $filter->search;
-            $query->where(function ($q) use ($searchTerm) {
-                $q->whereJsonContains('name->en', $searchTerm)
-                  ->orWhereJsonContains('description->en', $searchTerm)
-                  ->orWhereJsonContains('name->de', $searchTerm)
-                  ->orWhereJsonContains('description->de', $searchTerm)
-                  ->orWhereJsonContains('name->fr', $searchTerm)
-                  ->orWhereJsonContains('description->fr', $searchTerm);
-            });
+            
+            if ($filter->isLocaleSearchEnabled()) {
+                // Search only in current locale with fallback to English
+                $searchLocale = $filter->getSearchLocale();
+                $fallbackLocale = config('app.fallback_locale', 'en');
+                
+                $query->where(function ($q) use ($searchTerm, $searchLocale, $fallbackLocale) {
+                    // Search in current locale first
+                    $q->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$searchLocale}')) LIKE ?", ["%{$searchTerm}%"])
+                      ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(description, '$.{$searchLocale}')) LIKE ?", ["%{$searchTerm}%"]);
+                    
+                    // If current locale is not the fallback, also search in fallback
+                    if ($searchLocale !== $fallbackLocale) {
+                        $q->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$fallbackLocale}')) LIKE ?", ["%{$searchTerm}%"])
+                          ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(description, '$.{$fallbackLocale}')) LIKE ?", ["%{$searchTerm}%"]);
+                    }
+                });
+            } else {
+                // Search across all available languages
+                $availableLocales = array_keys(config('app.available_locales', ['en' => 'English']));
+                
+                $query->where(function ($q) use ($searchTerm, $availableLocales) {
+                    foreach ($availableLocales as $locale) {
+                        $q->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$locale}')) LIKE ?", ["%{$searchTerm}%"])
+                          ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(description, '$.{$locale}')) LIKE ?", ["%{$searchTerm}%"]);
+                    }
+                });
+            }
         }
 
         // Include completed filter
@@ -391,7 +422,7 @@ class EloquentTaskRepository extends BaseEloquentRepository implements TaskRepos
         return $this->model->where('user_id', $user->id)
             ->where(function ($query) use ($locale) {
                 $query->whereJsonDoesntContain("name->{$locale}", true)
-                      ->orWhereNull("name->{$locale}");
+                    ->orWhereNull("name->{$locale}");
             })
             ->get();
     }

@@ -32,7 +32,7 @@ check_dependencies() {
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
+    if ! command -v docker compose &> /dev/null; then
         print_error "Docker Compose is not installed. Please install Docker Compose first."
         exit 1
     fi
@@ -63,40 +63,40 @@ setup_env() {
 # Generate application key
 generate_app_key() {
     print_status "Generating application key..."
-    docker-compose exec app php artisan key:generate --ansi
+    docker compose exec app php artisan key:generate --ansi
 }
 
 # Run database migrations
 run_migrations() {
     print_status "Running database migrations..."
-    docker-compose exec app php artisan migrate --force
+    docker compose exec app php artisan migrate --force
 }
 
 # Seed database
 seed_database() {
     print_status "Seeding database..."
-    docker-compose exec app php artisan db:seed --force
+    docker compose exec app php artisan db:seed --force
 }
 
 # Install dependencies
 install_dependencies() {
     print_status "Installing PHP dependencies..."
-    docker-compose exec app composer install --optimize-autoloader
+    docker compose exec app composer install --optimize-autoloader
     
     print_status "Installing Node.js dependencies..."
-    docker-compose exec app npm install
+    docker compose exec app npm install
     
     print_status "Building frontend assets..."
-    docker-compose exec app npm run build
+    docker compose exec app npm run build
 }
 
 # Set permissions
 set_permissions() {
     print_status "Setting proper permissions..."
-    docker-compose exec app chown -R www-data:www-data /var/www/html/storage
-    docker-compose exec app chown -R www-data:www-data /var/www/html/bootstrap/cache
-    docker-compose exec app chmod -R 775 /var/www/html/storage
-    docker-compose exec app chmod -R 775 /var/www/html/bootstrap/cache
+    docker compose exec app chown -R www-data:www-data /var/www/html/storage
+    docker compose exec app chown -R www-data:www-data /var/www/html/bootstrap/cache
+    docker compose exec app chmod -R 775 /var/www/html/storage
+    docker compose exec app chmod -R 775 /var/www/html/bootstrap/cache
 }
 
 # Generate SSL certificates for development
@@ -117,20 +117,20 @@ generate_ssl_certs() {
 # Start services
 start_services() {
     print_status "Starting Docker services..."
-    docker-compose up -d
+    docker compose up -d
     
     print_status "Waiting for services to be ready..."
     sleep 10
     
     # Wait for MySQL to be ready
     print_status "Waiting for MySQL to be ready..."
-    until docker-compose exec mysql mysqladmin ping -h"localhost" --silent; do
+    until docker compose exec mysql mysqladmin ping -h"localhost" --silent; do
         sleep 2
     done
     
     # Wait for Redis to be ready
     print_status "Waiting for Redis to be ready..."
-    until docker-compose exec redis redis-cli ping; do
+    until docker compose exec redis redis-cli ping; do
         sleep 2
     done
     
@@ -140,7 +140,7 @@ start_services() {
 # Stop services
 stop_services() {
     print_status "Stopping Docker services..."
-    docker-compose down
+    docker compose down
 }
 
 # Clean up (remove containers, volumes, images)
@@ -149,7 +149,7 @@ cleanup() {
     read -r response
     if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
         print_status "Cleaning up Docker resources..."
-        docker-compose down -v --rmi all --remove-orphans
+        docker compose down -v --rmi all --remove-orphans
         print_status "Cleanup completed."
     else
         print_status "Cleanup cancelled."
@@ -159,16 +159,16 @@ cleanup() {
 # Show logs
 show_logs() {
     if [ -n "$1" ]; then
-        docker-compose logs -f "$1"
+        docker compose logs -f "$1"
     else
-        docker-compose logs -f
+        docker compose logs -f
     fi
 }
 
 # Show status
 show_status() {
     print_status "Docker services status:"
-    docker-compose ps
+    docker compose ps
     
     print_status "\nApplication URLs:"
     echo "  - Application: http://localhost"

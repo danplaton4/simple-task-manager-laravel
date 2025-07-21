@@ -1,130 +1,213 @@
-# Simple Task Management Application
+# Multilingual Task Management Application
 
-A Laravel-based task management application built as a coding interview solution. This application allows users to create, edit, delete, and manage tasks with hierarchical subtask support, featuring multilingual capabilities and soft delete functionality.
+A modern, full-stack task management application built with Laravel 12 and React 19. This application provides comprehensive task management capabilities with multilingual support, hierarchical task organization, real-time updates, and a fully containerized Docker environment.
 
-## � Interveiew Task Requirements
+## 🌟 Key Features
 
-This application was built to fulfill the following coding task requirements:
+### Core Task Management
+- **Complete CRUD Operations**: Create, read, update, and delete tasks with full validation
+- **Hierarchical Task Structure**: Support for parent tasks and unlimited subtask nesting
+- **Task Status Management**: Track progress with pending, in-progress, completed, and cancelled states
+- **Priority Levels**: Organize tasks by priority (low, medium, high, urgent)
+- **Due Date Management**: Set and track task deadlines with overdue indicators
+- **Soft Delete System**: Tasks are safely archived, not permanently deleted
 
-### Core Requirements ✅
-- **Web Form**: Laravel form for adding new tasks with name, description, and status fields
-- **Subtask Support**: Each task can have one or more subtasks with hierarchical organization
-- **Task Display**: Separate page listing all existing tasks from the database
-- **Edit & Delete**: Full CRUD functionality for individual tasks
-- **Soft Deletes**: Implemented soft delete functionality instead of permanent deletion
-- **MySQL Database**: Uses MySQL as the primary database
+### Multilingual Support 🌍
+- **Three Languages**: Full support for English (EN), German (DE), and French (FR)
+- **Dynamic Language Switching**: Change interface language on-the-fly
+- **Translatable Content**: Task names and descriptions support multiple languages
+- **Translation Status Tracking**: Visual indicators for translation completeness
+- **Locale-Aware API**: Backend automatically serves content in user's preferred language
 
-### Bonus Features ✅
-- **Multilingual Support**: Name and description fields are translatable in German (DE), French (FR), and English (EN)
-- **Modern UI**: React TypeScript frontend with responsive design
-- **API Architecture**: RESTful API with comprehensive endpoints
-- **Docker Setup**: Fully containerized for easy deployment and testing
+### Modern Frontend Architecture
+- **React 19 + TypeScript**: Type-safe, modern React application
+- **Responsive Design**: Mobile-first design with Tailwind CSS 4.0
+- **Real-time Updates**: WebSocket integration for live task updates
+- **Optimistic Updates**: Instant UI feedback with automatic error recovery
+- **Advanced UI Components**: Drag-and-drop, modals, notifications, and more
+- **Context-based State Management**: Efficient state management with React Context
 
-## 🚀 Quick Start
+## 🚀 Quick Start Guide
 
 ### Prerequisites
-- Docker and Docker Compose
-- Git
+- **Docker Desktop** (v20.10+) and **Docker Compose** (v2.0+)
+- **Git** for cloning the repository
+- **8GB RAM** recommended for optimal performance
 
-### 1. Clone and Setup
+### 1. Clone and Initial Setup
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd task-management-app
+
+# Copy environment configuration
 cp .env.example .env
 ```
 
-### 2. Quick Start (Automated)
+### 2. Automated Setup (Recommended)
 ```bash
-# Run the setup script for automatic installation
-./scripts/setup.sh
+# Run the complete setup script
+./docker/scripts/setup.sh setup
 ```
+
+This single command will:
+- ✅ Check Docker dependencies
+- ✅ Set up environment configuration
+- ✅ Generate SSL certificates for HTTPS
+- ✅ Start all Docker services
+- ✅ Install PHP and Node.js dependencies
+- ✅ Generate Laravel application key
+- ✅ Run database migrations
+- ✅ Seed sample data
+- ✅ Build frontend assets
+- ✅ Set proper file permissions
 
 ### 3. Manual Setup (Alternative)
 ```bash
-# Start Docker containers
+# Start Docker services
 docker compose up -d
+
+# Wait for services to be ready (especially MySQL)
+sleep 30
+
+# Install dependencies
+docker compose exec app composer install
+docker compose exec app npm install
 
 # Generate application key
 docker compose exec app php artisan key:generate
 
-# Run database migrations
-docker compose exec app php artisan migrate
-
-# Seed with sample data (optional)
-docker compose exec app php artisan db:seed
+# Run database setup
+docker compose exec app php artisan migrate --seed
 
 # Build frontend assets
-docker compose exec app npm install && npm run build
+docker compose exec app npm run build
+
+# Fix permissions
+docker compose exec app chmod -R 775 storage bootstrap/cache
 ```
 
 ### 4. Access the Application
-- **Main Application**: http://localhost
-- **Database Admin**: http://localhost:8080 (PHPMyAdmin)
-- **API Health**: http://localhost/api/health
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Main App** | http://localhost | Task management interface |
+| **PHPMyAdmin** | http://localhost:8080 | Database administration |
+| **MailHog** | http://localhost:8025 | Email testing interface |
+| **API Docs** | http://localhost/api/health | API health check |
 
-## 🎯 Application Features
+### 5. Default Login Credentials
+After seeding, you can log in with:
+- **Email**: `admin@example.com`
+- **Password**: `password`
 
-### Task Management
-- ✅ **Create Tasks**: Add new tasks with name, description, and status
-- ✅ **Subtask Support**: Create hierarchical subtasks under parent tasks
-- ✅ **Edit Tasks**: Modify existing tasks and their properties
-- ✅ **Delete Tasks**: Soft delete functionality (tasks can be restored)
-- ✅ **List Tasks**: View all tasks in an organized interface
-- ✅ **Task Status**: Track task progress (Pending, In Progress, Completed, Cancelled)
+## �️ Technicial Architecture
 
-### Multilingual Support (Bonus)
-- ✅ **English (EN)**: Default language
-- ✅ **German (DE)**: Full translation support
-- ✅ **French (FR)**: Full translation support
-- ✅ **Dynamic Language Switching**: Change language on the fly
+### Backend Stack
+- **Laravel 12**: Latest PHP framework with modern features
+- **PHP 8.2**: High-performance PHP runtime
+- **MySQL 8.0**: Robust relational database with JSON support
+- **Redis**: Caching, sessions, and queue management
+- **Laravel Sanctum**: API authentication and authorization
+- **Spatie Translatable**: Advanced multilingual content management
 
-### Technical Features
-- ✅ **MySQL Database**: Robust data storage with proper relationships
-- ✅ **Soft Deletes**: Tasks are marked as deleted, not permanently removed
-- ✅ **RESTful API**: Clean API architecture for frontend-backend communication
-- ✅ **Modern Frontend**: React TypeScript with responsive design
-- ✅ **Docker Environment**: Consistent development and deployment environment
+### Frontend Stack
+- **React 19**: Latest React with concurrent features
+- **TypeScript 5.8**: Full type safety and modern JavaScript features
+- **Vite 6**: Lightning-fast build tool and dev server
+- **Tailwind CSS 4.0**: Utility-first CSS framework
+- **Radix UI**: Accessible, unstyled UI components
+- **React Hook Form**: Performant form handling with validation
+- **Zod**: Runtime type validation and schema parsing
+
+### DevOps & Infrastructure
+- **Docker Compose**: Multi-container orchestration
+- **Nginx**: High-performance web server and reverse proxy
+- **Supervisor**: Process management for background tasks
+- **MailHog**: Email testing and debugging
+- **PHPMyAdmin**: Database administration interface
+
+### Development Tools
+- **Laravel Pint**: PHP code style fixer
+- **Laravel Telescope**: Application debugging and monitoring
+- **Pest**: Modern PHP testing framework
+- **ESLint + Prettier**: JavaScript/TypeScript code quality
 
 ## 🐳 Docker Architecture
 
-The application uses Docker for consistent development and deployment:
+The application runs in a fully containerized environment with optimized resource allocation:
 
-| Service | Port | Description |
-|---------|------|-------------|
-| **Laravel App** | - | PHP 8.2 application with Laravel framework |
-| **Nginx** | 80 | Web server serving the application |
-| **MySQL** | 3307 | Database server for task storage |
-| **Redis** | 6380 | Caching and session management |
-| **PHPMyAdmin** | 8080 | Database administration interface |
+| Service | Container | Port | Resources | Description |
+|---------|-----------|------|-----------|-------------|
+| **PHP App** | `taskapp_php` | - | 1.5GB RAM, 1 CPU | Laravel application with Supervisor |
+| **Nginx** | `taskapp_nginx` | 80, 443 | 128MB RAM | Web server with SSL support |
+| **MySQL** | `taskapp_mysql` | 3307 | 1GB RAM, 1 CPU | Database with custom configuration |
+| **Redis** | `taskapp_redis` | 6380 | 256MB RAM | Cache, sessions, and queues |
+| **PHPMyAdmin** | `taskapp_phpmyadmin` | 8080 | 128MB RAM | Database administration |
+| **MailHog** | `taskapp_mailhog` | 8025, 1025 | 64MB RAM | Email testing |
+| **Node.js** | `taskapp_node` | 5173 | - | Frontend development server |
 
-### Database Configuration
-- **Database**: `task_management`
-- **Username**: `taskapp`
-- **Password**: `taskapp_password`
-- **Host**: `localhost:3307` (external access)
+### Environment Configuration
+```bash
+# Database
+DB_HOST=mysql
+DB_DATABASE=task_management
+DB_USERNAME=taskapp
+DB_PASSWORD=taskapp_password
 
-## 📚 API Overview
+# Redis
+REDIS_HOST=redis
+REDIS_PORT=6379
 
-The application provides a RESTful API for task management:
+# Mail (Development)
+MAIL_HOST=mailhog
+MAIL_PORT=1025
+```
 
-### Core Task Endpoints
+### Volume Management
+- **mysql_data**: Persistent database storage
+- **redis_data**: Redis persistence
+- **Application files**: Bind-mounted for development
+
+## 📚 API Documentation
+
+### Authentication Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/tasks` | List all tasks (with filtering) |
-| POST | `/api/tasks` | Create new task |
-| GET | `/api/tasks/{id}` | Get specific task |
-| PUT | `/api/tasks/{id}` | Update task |
-| DELETE | `/api/tasks/{id}` | Soft delete task |
-| POST | `/api/tasks/{id}/restore` | Restore deleted task |
+| POST | `/api/auth/register` | User registration |
+| POST | `/api/auth/login` | User authentication |
+| POST | `/api/auth/logout` | User logout |
+| GET | `/api/auth/user` | Get authenticated user |
 
-### Subtask Management
+### Task Management API
+| Method | Endpoint | Description | Parameters |
+|--------|----------|-------------|-----------|
+| GET | `/api/tasks` | List tasks with filtering | `status`, `priority`, `search`, `page` |
+| POST | `/api/tasks` | Create new task | Task data with translations |
+| GET | `/api/tasks/{id}` | Get specific task | Include translations |
+| PUT | `/api/tasks/{id}` | Update task | Partial task data |
+| DELETE | `/api/tasks/{id}` | Soft delete task | - |
+| POST | `/api/tasks/{id}/restore` | Restore deleted task | - |
+| PATCH | `/api/tasks/{id}/status` | Update task status | `status` |
+
+### Subtask Operations
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/tasks/{id}/subtasks` | Get task subtasks |
 | POST | `/api/tasks/{parentId}/subtasks` | Create subtask |
+| POST | `/api/tasks/bulk-update` | Bulk update multiple tasks |
+| POST | `/api/tasks/reorder` | Reorder tasks |
 
-### Example Task Creation (Multilingual)
+### Localization API
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/locale` | Get current locale info |
+| POST | `/api/locale/preference` | Set user language preference |
+
+### Example API Requests
+
+#### Create Multilingual Task
 ```json
+POST /api/tasks
 {
   "name": {
     "en": "Complete project documentation",
@@ -137,30 +220,49 @@ The application provides a RESTful API for task management:
     "fr": "Rédiger une documentation complète"
   },
   "status": "pending",
+  "priority": "high",
+  "due_date": "2025-08-01",
   "parent_id": null
 }
 ```
 
-## �️ Dateabase Structure
+#### Filter Tasks
+```bash
+GET /api/tasks?status=pending&priority=high&search=documentation&page=1
+```
 
-### Tasks Table
-The main tasks table includes:
-- `id` - Primary key
-- `name` - JSON field for multilingual names (en, de, fr)
-- `description` - JSON field for multilingual descriptions
-- `status` - Task status (pending, in_progress, completed, cancelled)
-- `priority` - Task priority (low, medium, high, urgent)
-- `parent_id` - Foreign key for subtask relationships
-- `user_id` - Task owner
-- `due_date` - Optional due date
-- `deleted_at` - Soft delete timestamp
-- `created_at` / `updated_at` - Timestamps
+#### Bulk Update
+```json
+POST /api/tasks/bulk-update
+{
+  "updates": [
+    {"id": 1, "data": {"status": "completed"}},
+    {"id": 2, "data": {"priority": "urgent"}}
+  ]
+}
+```
 
-### Key Features
-- **Soft Deletes**: Tasks are never permanently deleted
-- **Hierarchical Structure**: Parent-child relationships for subtasks
-- **Multilingual Support**: JSON fields store translations
-- **User Ownership**: Each task belongs to a user
+## 🗄️ Database Schema
+
+### Tasks Table Structure
+```sql
+CREATE TABLE tasks (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    name JSON NOT NULL,                    -- Multilingual names
+    description JSON,                      -- Multilingual descriptions
+    status ENUM('pending', 'in_progress', 'completed', 'cancelled') DEFAULT 'pending',
+    priority ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium',
+    due_date DATE NULL,
+    parent_id BIGINT UNSIGNED NULL,        -- Self-referencing for subtasks
+    user_id BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL,
+    deleted_at TIMESTAMP NULL,             -- Soft delete support
+    
+    FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_status (status),
+    INDEX idx_
 
 ## 💻 Development Commands
 
@@ -237,6 +339,27 @@ it('can create a task with subtasks', function () {
     $response->assertStatus(201);
     expect($response->json('data.name'))->toBe('Parent Task');
 });
+```
+
+## Running Tests
+
+To run the test suite, you can use the following commands from the root of the project:
+
+### Run all tests
+```bash
+docker compose exec app php artisan test
+```
+
+### Run only fast tests
+To get a quick feedback loop, you can exclude the more resource-intensive tests:
+```bash
+docker compose exec app php artisan test --exclude-group=slow
+```
+
+### Run only slow tests
+To run the full integration and performance tests, you can run only the "slow" group:
+```bash
+docker compose exec app php artisan test --group=slow
 ```
 
 ## ⚙️ Key Implementation Details

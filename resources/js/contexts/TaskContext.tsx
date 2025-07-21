@@ -21,7 +21,7 @@ interface TaskState {
 
 interface TaskContextType extends TaskState {
   // Task operations
-  fetchTasks: (page?: number, filters?: TaskFilters) => Promise<void>;
+  fetchTasks: (page?: number, filters?: TaskFilters, includeTranslations?: boolean) => Promise<void>;
   fetchTask: (id: number) => Promise<void>;
   createTask: (taskData: TaskFormData) => Promise<Task>;
   updateTask: (id: number, taskData: Partial<TaskFormData>) => Promise<Task>;
@@ -120,12 +120,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   }, []);
 
   // Fetch tasks with pagination and filtering
-  const fetchTasks = useCallback(async (page = 1, filters?: TaskFilters) => {
+  const fetchTasks = useCallback(async (page = 1, filters?: TaskFilters, includeTranslations = false) => {
     try {
       updateState({ isLoading: true, error: null });
       
       const filtersToUse = filters || state.filters;
-      const response = await TaskService.getTasks(filtersToUse, page, state.pagination.perPage);
+      const response = await TaskService.getTasks(filtersToUse, page, state.pagination.perPage, includeTranslations);
       
       updateState({
         tasks: response.data,
@@ -148,8 +148,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   const fetchTask = useCallback(async (id: number) => {
     try {
       updateState({ isLoading: true, error: null });
-      
-      const task = await TaskService.getTask(id);
+      const task = await TaskService.getTask(id); // now always includes translations
       updateState({ currentTask: task, isLoading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch task';
@@ -159,12 +158,15 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
   // Create task with optimistic update
   const createTask = useCallback(async (taskData: TaskFormData): Promise<Task> => {
+    // Generate a unique temporary ID outside try block
+    const tempId = -Date.now(); // Negative to distinguish from real IDs
+    
     try {
       updateState({ error: null });
       
       // Create optimistic task
       const optimisticTask: Task = {
-        id: Date.now(), // Temporary ID
+        id: tempId,
         name: taskData.name,
         description: taskData.description,
         status: taskData.status,
@@ -187,20 +189,23 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       setState(prev => ({
         ...prev,
         tasks: prev.tasks.map(task => 
-          task.id === optimisticTask.id ? createdTask : task
+          task.id === tempId ? createdTask : task
         )
       }));
       
       return createdTask;
     } catch (error) {
-      // Remove optimistic task on error
-      removeTaskOptimistically(Date.now());
+      // Remove optimistic task on error using the correct temp ID
+      setState(prev => ({
+        ...prev,
+        tasks: prev.tasks.filter(task => task.id !== tempId)
+      }));
       
       const errorMessage = error instanceof Error ? error.message : 'Failed to create task';
       updateState({ error: errorMessage });
       throw error;
     }
-  }, [updateState, addTaskOptimistically, removeTaskOptimistically]);
+  }, [updateState, addTaskOptimistically]);
 
   // Update task with optimistic update
   const updateTask = useCallback(async (id: number, taskData: Partial<TaskFormData>): Promise<Task> => {

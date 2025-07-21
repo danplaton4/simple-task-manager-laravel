@@ -12,17 +12,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Enable stateful authentication for SPA (as per Laravel Sanctum documentation)
+        // This middleware ensures that requests from stateful domains use session-based auth
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
         
-        // Add localization middleware to both web and api groups
+        // Add localization middleware only to web group (not API)
         $middleware->web(append: [
             \App\Http\Middleware\LocalizationMiddleware::class,
         ]);
         
         $middleware->api(append: [
-            \App\Http\Middleware\LocalizationMiddleware::class,
             \App\Http\Middleware\LogApiRequests::class,
         ]);
         
@@ -41,6 +42,24 @@ return Application::configure(basePath: dirname(__DIR__))
                 'request_path' => $request->path(),
                 'request_id' => $request->header('X-Request-ID') ?? uniqid(),
             ]);
+
+            if ($e instanceof \App\Exceptions\DomainException) {
+                // Log domain exceptions as errors
+                \Illuminate\Support\Facades\Log::error('DomainException', [
+                    'exception' => get_class($e),
+                    'message' => $e->getMessage(),
+                    'context' => $e->getContext(),
+                    'code' => $e->getErrorCode(),
+                    'request_path' => $request->path(),
+                ]);
+                return response()->json([
+                    'error' => [
+                        'message' => $e->getMessage(),
+                        'code' => $e->getErrorCode(),
+                        'context' => $e->getContext(),
+                    ]
+                ], $e->getHttpStatusCode());
+            }
 
             // Log security-related exceptions
             if ($e instanceof \Illuminate\Auth\AuthenticationException ||

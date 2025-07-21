@@ -1,36 +1,57 @@
 import axios from 'axios';
 import { LoginCredentials, RegisterData, AuthResponse, User } from '@/types';
 
+/**
+ * Authentication Service for Laravel Sanctum SPA Authentication
+ * 
+ * This service implements proper SPA authentication as per Laravel Sanctum documentation:
+ * https://laravel.com/docs/12.x/sanctum#spa-authentication
+ * 
+ * For SPAs, Sanctum uses stateful authentication with CSRF protection:
+ * - First request gets CSRF cookie from /sanctum/csrf-cookie
+ * - Authentication uses session cookies (not Bearer tokens)
+ * - CSRF tokens are automatically handled by axios interceptors
+ */
 class AuthService {
   private static readonly ENDPOINTS = {
+    CSRF_COOKIE: '/sanctum/csrf-cookie',
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
-    REFRESH: '/auth/refresh',
+    LOGOUT_ALL: '/auth/logout-all',
     ME: '/auth/me'
-  };
+  } as const;
+
+  /**
+   * Get CSRF cookie before making authenticated requests
+   */
+  private static async getCsrfCookie(): Promise<void> {
+    try {
+      await axios.get(this.ENDPOINTS.CSRF_COOKIE);
+    } catch (error) {
+      console.warn('Failed to get CSRF cookie:', error);
+      throw error;
+    }
+  }
 
   /**
    * Authenticate user with email and password
    */
   static async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
+      // Get CSRF cookie first (required for SPA authentication)
+      await this.getCsrfCookie();
+      
       const response = await axios.post<AuthResponse>(
         this.ENDPOINTS.LOGIN,
         credentials
       );
       
-      // Store the token in localStorage
-      if (response.data.token) {
-        localStorage.setItem('auth_token', response.data.token);
-      }
-      
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(
-          error.response?.data?.message || 'Login failed. Please try again.'
-        );
+        const errorMessage = error.response?.data?.message || 'Login failed. Please try again.';
+        throw new Error(errorMessage);
       }
       throw new Error('An unexpected error occurred during login.');
     }
@@ -41,22 +62,29 @@ class AuthService {
    */
   static async register(userData: RegisterData): Promise<AuthResponse> {
     try {
+      // Get CSRF cookie first (required for SPA authentication)
+      await this.getCsrfCookie();
+      
       const response = await axios.post<AuthResponse>(
         this.ENDPOINTS.REGISTER,
         userData
       );
       
-      // Store the token in localStorage
-      if (response.data.token) {
-        localStorage.setItem('auth_token', response.data.token);
-      }
-      
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.message || 
-          'Registration failed. Please try again.';
-        throw new Error(errorMessage);
+        const data = error.response?.data;
+        
+        // Handle validation errors
+        if (data && data.errors) {
+          throw { 
+            message: data.message || 'Registration failed.', 
+            errors: data.errors 
+          };
+        }
+        
+        // Handle other API errors
+        throw new Error(data?.message || 'Registration failed. Please try again.');
       }
       throw new Error('An unexpected error occurred during registration.');
     }
@@ -69,37 +97,18 @@ class AuthService {
     try {
       await axios.post(this.ENDPOINTS.LOGOUT);
     } catch (error) {
-      // Even if the API call fails, we should still clear local storage
       console.warn('Logout API call failed:', error);
-    } finally {
-      // Always clear the token from localStorage
-      localStorage.removeItem('auth_token');
     }
   }
 
   /**
-   * Refresh the authentication token
+   * Logout from all devices
    */
-  static async refreshToken(): Promise<string> {
+  static async logoutAll(): Promise<void> {
     try {
-      const response = await axios.post<{ token: string }>(
-        this.ENDPOINTS.REFRESH
-      );
-      
-      const newToken = response.data.token;
-      localStorage.setItem('auth_token', newToken);
-      
-      return newToken;
+      await axios.post(this.ENDPOINTS.LOGOUT_ALL);
     } catch (error) {
-      // If refresh fails, clear the token and throw error
-      localStorage.removeItem('auth_token');
-      
-      if (axios.isAxiosError(error)) {
-        throw new Error(
-          error.response?.data?.message || 'Token refresh failed.'
-        );
-      }
-      throw new Error('An unexpected error occurred during token refresh.');
+      console.warn('Logout all API call failed:', error);
     }
   }
 
@@ -108,8 +117,8 @@ class AuthService {
    */
   static async getCurrentUser(): Promise<User> {
     try {
-      const response = await axios.get<User>(this.ENDPOINTS.ME);
-      return response.data;
+      const response = await axios.get<{ user: User }>(this.ENDPOINTS.ME);
+      return response.data.user;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         throw new Error(
@@ -121,25 +130,28 @@ class AuthService {
   }
 
   /**
-   * Check if user is currently authenticated
+   * Check if user is currently authenticated by making a request to /me
+   * For SPA authentication, we rely on session cookies, not stored tokens
    */
-  static isAuthenticated(): boolean {
-    const token = localStorage.getItem('auth_token');
-    return !!token;
+  static async isAuthenticated(): Promise<boolean> {
+    try {
+      await this.getCurrentUser();
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   /**
-   * Get the current authentication token
+   * Validate authentication by making a request to the /me endpoint
    */
-  static getToken(): string | null {
-    return localStorage.getItem('auth_token');
-  }
-
-  /**
-   * Clear authentication data
-   */
-  static clearAuth(): void {
-    localStorage.removeItem('auth_token');
+  static async validateAuth(): Promise<boolean> {
+    try {
+      await this.getCurrentUser();
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 }
 

@@ -7,11 +7,13 @@ import TaskForm from '@/components/tasks/TaskForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useNotifications } from '@/components/ui/notification';
 
 const NewTaskPage: React.FC = () => {
   const { tasks, fetchTasks, error, clearError } = useTask();
   const { isCreating, createTaskWithLoading } = useTaskOperations();
   const navigate = useNavigate();
+  const { addNotification } = useNotifications();
 
   // Load tasks for parent selection
   useEffect(() => {
@@ -19,26 +21,33 @@ const NewTaskPage: React.FC = () => {
   }, [fetchTasks]);
 
   // Filter tasks that can be parents (exclude completed and cancelled tasks)
-  const availableParents = tasks.filter(task => 
-    task.status !== 'completed' && 
-    task.status !== 'cancelled' &&
-    !task.parent_id // Only top-level tasks can be parents
-  );
+  const availableParents = tasks
+    .filter(task => !!task && typeof task.status === 'string')
+    .filter(task => 
+      task.status !== 'completed' && 
+      task.status !== 'cancelled' &&
+      !task.parent_id // Only top-level tasks can be parents
+    );
 
   const handleSubmit = async (taskData: TaskFormData) => {
     try {
       const newTask = await createTaskWithLoading(taskData);
       
       if (newTask) {
-        // Show success message (in a real app, you'd use a toast notification)
-        alert('Task created successfully!');
-        
-        // Navigate back to tasks page
+        addNotification({
+          type: 'success',
+          title: 'Task Created',
+          message: 'Task created successfully!'
+        });
         navigate('/tasks');
       }
     } catch (error) {
       console.error('Failed to create task:', error);
-      alert('Failed to create task. Please try again.');
+      addNotification({
+        type: 'error',
+        title: 'Task Creation Failed',
+        message: 'Failed to create task. Please try again.'
+      });
     }
   };
 

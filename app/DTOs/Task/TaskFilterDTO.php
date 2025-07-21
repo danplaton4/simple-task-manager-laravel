@@ -24,7 +24,9 @@ class TaskFilterDTO extends BaseDTO
         public readonly bool $includeCompleted = true,
         public readonly bool $includeDeleted = false,
         public readonly ?string $datePreset = null,
-        public readonly string $hierarchyLevel = 'all'
+        public readonly string $hierarchyLevel = 'all',
+        public readonly bool $localeSearch = true, // Whether to search only in current locale
+        public readonly ?string $searchLocale = null // Specific locale to search in
     ) {}
 
     /**
@@ -51,7 +53,9 @@ class TaskFilterDTO extends BaseDTO
             includeCompleted: $filters['include_completed'] ?? true,
             includeDeleted: $filters['include_deleted'] ?? false,
             datePreset: $request->input('date_preset'),
-            hierarchyLevel: $filters['hierarchy_level'] ?? 'all'
+            hierarchyLevel: $filters['hierarchy_level'] ?? 'all',
+            localeSearch: $request->boolean('locale_search', true),
+            searchLocale: $request->input('search_locale')
         );
     }
 
@@ -75,7 +79,9 @@ class TaskFilterDTO extends BaseDTO
             includeCompleted: $data['include_completed'] ?? true,
             includeDeleted: $data['include_deleted'] ?? false,
             datePreset: $data['date_preset'] ?? null,
-            hierarchyLevel: $data['hierarchy_level'] ?? 'all'
+            hierarchyLevel: $data['hierarchy_level'] ?? 'all',
+            localeSearch: $data['locale_search'] ?? true,
+            searchLocale: $data['search_locale'] ?? null
         );
     }
 
@@ -95,6 +101,8 @@ class TaskFilterDTO extends BaseDTO
             'include_completed' => $this->includeCompleted,
             'include_deleted' => $this->includeDeleted,
             'hierarchy_level' => $this->hierarchyLevel,
+            'locale_search' => $this->localeSearch,
+            'search_locale' => $this->searchLocale,
         ];
     }
 
@@ -251,5 +259,29 @@ class TaskFilterDTO extends BaseDTO
     public function getOffset(): int
     {
         return ($this->page - 1) * $this->perPage;
+    }
+
+    /**
+     * Check if locale-aware search is enabled.
+     */
+    public function isLocaleSearchEnabled(): bool
+    {
+        return $this->localeSearch && $this->hasSearch();
+    }
+
+    /**
+     * Get the locale to search in (specific locale or current app locale).
+     */
+    public function getSearchLocale(): string
+    {
+        return $this->searchLocale ?? app()->getLocale();
+    }
+
+    /**
+     * Check if searching in all locales.
+     */
+    public function isSearchingAllLocales(): bool
+    {
+        return !$this->localeSearch && $this->hasSearch();
     }
 }

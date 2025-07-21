@@ -5,6 +5,7 @@ import { Task } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, Calendar, User, Clock, GripVertical } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface DraggableTaskCardProps {
   task: Task;
@@ -16,6 +17,7 @@ interface DraggableTaskCardProps {
   showSubtasks?: boolean;
   isDragEnabled?: boolean;
   isOverlay?: boolean;
+  onOpenTask?: (task: Task) => void;
 }
 
 const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
@@ -27,7 +29,8 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
   depth = 0,
   showSubtasks = true,
   isDragEnabled = false,
-  isOverlay = false
+  isOverlay = false,
+  onOpenTask
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasSubtasks = task.subtasks && task.subtasks.length > 0;
@@ -93,6 +96,15 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
     }
   };
 
+  const getTranslation = (field: any, lang?: string) => {
+    const { language } = useLanguage();
+    const l = lang || language;
+    if (typeof field === 'object' && field !== null && field[l]) {
+      return field[l];
+    }
+    return typeof field === 'string' ? field : '';
+  };
+
   const toggleExpanded = () => {
     if (hasSubtasks) {
       setIsExpanded(!isExpanded);
@@ -100,7 +112,9 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
   };
 
   return (
-    <div className={`${depth > 0 ? 'ml-6 border-l-2 border-border pl-4' : ''}`}>
+    <div className={`${depth > 0 ? 'ml-6 border-l-2 border-border pl-4' : ''}`}
+      onClick={() => onOpenTask && onOpenTask(task)}
+    >
       <Card 
         ref={setNodeRef}
         style={style}
@@ -117,6 +131,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
                   {...listeners}
                   className="mt-1 p-1 hover:bg-muted rounded transition-colors cursor-grab active:cursor-grabbing"
                   aria-label="Drag to reorder"
+                  onClick={e => e.stopPropagation()}
                 >
                   <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </button>
@@ -124,9 +139,9 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
               
               {hasSubtasks && (
                 <button
-                  onClick={toggleExpanded}
                   className="mt-1 p-1 hover:bg-muted rounded transition-colors"
                   aria-label={isExpanded ? 'Collapse subtasks' : 'Expand subtasks'}
+                  onClick={e => { e.stopPropagation(); toggleExpanded(); }}
                 >
                   {isExpanded ? (
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -140,7 +155,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
                 <CardTitle className={`text-lg ${
                   task.status === 'completed' ? 'line-through text-muted-foreground' : ''
                 }`}>
-                  {task.name}
+                  {getTranslation(task.name)}
                   {hasSubtasks && (
                     <span className="ml-2 text-sm font-normal text-muted-foreground">
                       ({task.subtasks!.length} subtask{task.subtasks!.length !== 1 ? 's' : ''})
@@ -156,7 +171,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onToggleStatus(task.id)}
+                    onClick={e => { e.stopPropagation(); onToggleStatus && onToggleStatus(task.id); }}
                     className={task.status === 'completed' ? 'text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300' : 'text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300'}
                   >
                     {task.status === 'completed' ? 'Reopen' : 'Complete'}
@@ -166,7 +181,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onEdit(task)}
+                    onClick={e => { e.stopPropagation(); onEdit && onEdit(task); }}
                     className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                   >
                     Edit
@@ -176,7 +191,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onDelete(task.id)}
+                    onClick={e => { e.stopPropagation(); onDelete && onDelete(task.id); }}
                     className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
                   >
                     Delete
@@ -190,7 +205,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
         <CardContent className="pt-0">
           {task.description && (
             <p className="text-muted-foreground mb-4 leading-relaxed">
-              {task.description}
+              {getTranslation(task.description)}
             </p>
           )}
           
@@ -222,7 +237,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onViewSubtasks(task)}
+                onClick={e => { e.stopPropagation(); onViewSubtasks && onViewSubtasks(task); }}
                 className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 Manage Subtasks ({task.subtasks!.length})
@@ -246,6 +261,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({
               depth={depth + 1}
               showSubtasks={showSubtasks}
               isDragEnabled={false} // Subtasks are not draggable
+              onOpenTask={onOpenTask}
             />
           ))}
         </div>

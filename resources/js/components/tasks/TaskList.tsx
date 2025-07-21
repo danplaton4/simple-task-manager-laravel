@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Task, TaskFilters } from '@/types';
+import { Task, TaskFilters, Language } from '@/types';
 import TaskCard from './TaskCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, SortAsc, SortDesc, List, Grid } from 'lucide-react';
+import { Search, Filter, SortAsc, SortDesc, List, Grid, Globe } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface TaskListProps {
   tasks: Task[];
@@ -32,19 +33,73 @@ const TaskList: React.FC<TaskListProps> = ({
   showSearch = true,
   viewMode = 'list'
 }) => {
+  const { language } = useLanguage();
   const [filters, setFilters] = useState<TaskFilters>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [showCompleted, setShowCompleted] = useState(true);
   const [currentViewMode, setCurrentViewMode] = useState<'list' | 'grid'>(viewMode);
+  const [searchInAllLanguages, setSearchInAllLanguages] = useState(false);
+
+  // Helper function to get localized text with fallback
+  const getLocalizedText = (field: string | Record<string, string> | undefined, fallbackLang: Language = 'en'): string => {
+    if (!field) return '';
+    
+    if (typeof field === 'string') {
+      return field;
+    }
+    
+    if (typeof field === 'object') {
+      // Try current language first
+      if (field[language] && field[language].trim()) {
+        return field[language];
+      }
+      
+      // Fallback to English
+      if (field[fallbackLang] && field[fallbackLang].trim()) {
+        return field[fallbackLang];
+      }
+      
+      // Fallback to first available translation
+      const firstAvailable = Object.values(field).find(val => val && val.trim());
+      return firstAvailable || '';
+    }
+    
+    return '';
+  };
+
+  // Helper function to search in all languages or current language only
+  const searchInText = (field: string | Record<string, string> | undefined, searchTerm: string): boolean => {
+    if (!field || !searchTerm) return true;
+    
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    
+    if (typeof field === 'string') {
+      return field.toLowerCase().includes(lowerSearchTerm);
+    }
+    
+    if (typeof field === 'object') {
+      if (searchInAllLanguages) {
+        // Search in all available translations
+        return Object.values(field).some(text => 
+          text && text.toLowerCase().includes(lowerSearchTerm)
+        );
+      } else {
+        // Search only in current language with fallback
+        const localizedText = getLocalizedText(field);
+        return localizedText.toLowerCase().includes(lowerSearchTerm);
+      }
+    }
+    
+    return false;
+  };
 
   // Filter and sort tasks
   const filteredAndSortedTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
-      // Filter by search term
-      if (searchTerm && !task.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !task.description?.toLowerCase().includes(searchTerm.toLowerCase())) {
+      // Filter by search term (locale-aware)
+      if (searchTerm && !searchInText(task.name, searchTerm) && !searchInText(task.description, searchTerm)) {
         return false;
       }
 
@@ -73,8 +128,8 @@ const TaskList: React.FC<TaskListProps> = ({
 
       switch (sortBy) {
         case 'name':
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
+          aValue = getLocalizedText(a.name).toLowerCase();
+          bValue = getLocalizedText(b.name).toLowerCase();
           break;
         case 'created_at':
           aValue = new Date(a.created_at);
@@ -104,7 +159,7 @@ const TaskList: React.FC<TaskListProps> = ({
     });
 
     return filtered;
-  }, [tasks, searchTerm, filters, sortBy, sortDirection, showCompleted]);
+  }, [tasks, searchTerm, filters, sortBy, sortDirection, showCompleted, language, searchInAllLanguages]);
 
   // Separate parent tasks and subtasks for hierarchical display
   const parentTasks = useMemo(() => {
@@ -135,14 +190,35 @@ const TaskList: React.FC<TaskListProps> = ({
       {(showSearch || showFilters) && (
         <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
           {showSearch && (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search tasks..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder={`Search tasks in ${searchInAllLanguages ? 'all languages' : language.toUpperCase()}...`}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSearchInAllLanguages(!searchInAllLanguages)}
+                  className={`flex items-center gap-2 ${searchInAllLanguages ? 'bg-blue-50 border-blue-200' : ''}`}
+                >
+                  <Globe className="h-3 w-3" />
+                  {searchInAllLanguages ? 'Search all languages' : `Search ${language.toUpperCase()} only`}
+                </Button>
+                {searchTerm && (
+                  <span className="text-xs text-gray-500">
+                    {searchInAllLanguages 
+                      ? 'Searching across all language translations'
+                      : `Searching in ${language.toUpperCase()} with English fallback`
+                    }
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -153,14 +229,14 @@ const TaskList: React.FC<TaskListProps> = ({
                 <span className="text-sm font-medium text-gray-700">Filters:</span>
               </div>
 
-              <Select value={filters.status || ''} onValueChange={(value) => 
-                setFilters(prev => ({ ...prev, status: value as Task['status'] || undefined }))
+              <Select value={filters.status || 'all'} onValueChange={(value) => 
+                setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : (value as Task['status']) }))
               }>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Status</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
@@ -168,14 +244,14 @@ const TaskList: React.FC<TaskListProps> = ({
                 </SelectContent>
               </Select>
 
-              <Select value={filters.priority || ''} onValueChange={(value) => 
-                setFilters(prev => ({ ...prev, priority: value as Task['priority'] || undefined }))
+              <Select value={filters.priority || 'all'} onValueChange={(value) => 
+                setFilters(prev => ({ ...prev, priority: value === 'all' ? undefined : (value as Task['priority']) }))
               }>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Priority</SelectItem>
+                  <SelectItem value="all">All Priority</SelectItem>
                   <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
                   <SelectItem value="high">High</SelectItem>
@@ -243,11 +319,39 @@ const TaskList: React.FC<TaskListProps> = ({
         </div>
       )}
 
-      {/* Task Count */}
+      {/* Task Count and Translation Summary */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-600">
           Showing {filteredAndSortedTasks.length} of {tasks.length} tasks
         </p>
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center gap-1">
+            <Globe className="h-3 w-3" />
+            <span>Current: {language.toUpperCase()}</span>
+          </div>
+          {filteredAndSortedTasks.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span>Translation status:</span>
+              <div className="flex items-center gap-1">
+                {(() => {
+                  const withTranslation = filteredAndSortedTasks.filter(task => {
+                    const name = typeof task.name === 'object' ? task.name : { en: task.name };
+                    return name[language] && name[language].trim();
+                  }).length;
+                  const percentage = Math.round((withTranslation / filteredAndSortedTasks.length) * 100);
+                  
+                  return (
+                    <>
+                      <span className={percentage === 100 ? 'text-green-600' : percentage > 50 ? 'text-yellow-600' : 'text-red-600'}>
+                        {withTranslation}/{filteredAndSortedTasks.length} ({percentage}%)
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tasks Display */}

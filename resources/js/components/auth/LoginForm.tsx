@@ -45,9 +45,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 bg-white/90 dark:bg-white/10 p-8 rounded-xl shadow-lg border border-gray-200 dark:border-gray-600 dark:text-white backdrop-blur">
         {error && (
-          <div className="bg-destructive/15 border border-destructive/20 text-destructive px-4 py-3 rounded-md">
+          <div className="bg-destructive/15 border border-destructive/20 text-destructive px-4 py-3 rounded-md dark:bg-red-900/30 dark:border-red-800 dark:text-red-300">
             {error}
           </div>
         )}

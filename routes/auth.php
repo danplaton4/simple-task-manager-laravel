@@ -20,6 +20,11 @@ Route::get('/sanctum/csrf-cookie', function (Request $request) {
     return response()->json(['message' => 'CSRF cookie set']);
 });
 
+// Alternative CSRF cookie route
+Route::get('/csrf-cookie', function (Request $request) {
+    return response()->json(['message' => 'CSRF cookie set']);
+});
+
 // Public authentication routes with rate limiting
 Route::prefix('auth')->middleware('auth.rate_limit')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
@@ -35,6 +40,5 @@ Route::prefix('auth')->middleware('auth.rate_limit')->group(function () {
 Route::middleware('auth:sanctum')->prefix('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::post('/logout-all', [AuthController::class, 'logoutAll'])->name('auth.logout-all');
-    Route::post('/refresh', [AuthController::class, 'refresh'])->name('auth.refresh');
     Route::get('/me', [AuthController::class, 'me'])->name('auth.me');
 });

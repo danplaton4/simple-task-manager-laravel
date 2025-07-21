@@ -14,13 +14,15 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNotifications } from '@/components/ui/notification';
 
 interface RegisterFormProps {
   onSuccess?: () => void;
 }
 
 const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
-  const { register, isLoading, error, clearError } = useAuth();
+  const { register, isLoading, error, fieldErrors, clearError } = useAuth();
+  const { addNotification } = useNotifications();
   
   const form = useForm<RegisterData>({
     defaultValues: {
@@ -38,21 +40,49 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
     clearError();
   }, [clearError]);
 
+  // Set backend field errors on the form when they change
+  useEffect(() => {
+    if (fieldErrors) {
+      Object.entries(fieldErrors).forEach(([field, messages]) => {
+        form.setError(field as keyof RegisterData, {
+          type: 'server',
+          message: messages.join(' ')
+        });
+      });
+    }
+  }, [fieldErrors, form]);
+
+  // Show toast for non-field errors
+  useEffect(() => {
+    if (error && !fieldErrors) {
+      addNotification({
+        type: 'error',
+        title: 'Registration Failed',
+        message: error,
+        duration: 5000
+      });
+    }
+  }, [error, fieldErrors, addNotification]);
+
   const handleSubmit = async (data: RegisterData) => {
     try {
       await register(data);
       onSuccess?.();
     } catch (error) {
-      // Error is handled by AuthContext
-      console.error('Registration failed:', error);
+      // Error is handled by AuthContext and field errors are set via useEffect
+      // Only log unexpected errors
+      if (!(error && (error as any).errors)) {
+        console.error('Registration failed:', error);
+      }
     }
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        {error && (
-          <div className="bg-destructive/15 border border-destructive/20 text-destructive px-4 py-3 rounded-md">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 bg-white/90 dark:bg-white/10 p-8 rounded-xl shadow-lg border border-gray-200 dark:border-gray-600 dark:text-white backdrop-blur">
+        {/* Show only non-field errors here */}
+        {error && !fieldErrors && (
+          <div className="bg-destructive/15 border border-destructive/20 text-destructive px-4 py-3 rounded-md dark:bg-red-900/30 dark:border-red-800 dark:text-red-300">
             {error}
           </div>
         )}
@@ -120,6 +150,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
                   <Input
                     type="password"
                     placeholder="Enter your password"
+                    autoComplete="new-password"
+                    aria-invalid={!!form.formState.errors.password}
                     {...field}
                   />
                 </FormControl>
@@ -145,6 +177,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
                   <Input
                     type="password"
                     placeholder="Confirm your password"
+                    autoComplete="new-password"
+                    aria-invalid={!!form.formState.errors.password_confirmation}
                     {...field}
                   />
                 </FormControl>

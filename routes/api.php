@@ -45,6 +45,14 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
     
+    // Locale preference management routes
+    Route::post('/locale/preference', [App\Http\Controllers\LocaleController::class, 'updatePreference']);
+    Route::get('/locale/current', [App\Http\Controllers\LocaleController::class, 'getCurrentLocale']);
+    
+    // Translation performance monitoring routes
+    Route::get('/locale/performance-metrics', [App\Http\Controllers\LocaleController::class, 'performanceMetrics']);
+    Route::delete('/locale/performance-metrics', [App\Http\Controllers\LocaleController::class, 'clearMetrics']);
+    
     // Task management routes
     Route::apiResource('tasks', App\Http\Controllers\TaskController::class);
     Route::post('/tasks/{id}/restore', [App\Http\Controllers\TaskController::class, 'restore']);

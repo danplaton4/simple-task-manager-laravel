@@ -41,6 +41,7 @@ interface DraggableTaskListProps {
   showSearch?: boolean;
   viewMode?: 'list' | 'grid';
   enableDragAndDrop?: boolean;
+  onOpenTask?: (task: Task) => void;
 }
 
 type SortOption = 'name' | 'created_at' | 'due_date' | 'priority' | 'status' | 'custom';
@@ -57,7 +58,8 @@ const DraggableTaskList: React.FC<DraggableTaskListProps> = ({
   showFilters = true,
   showSearch = true,
   viewMode = 'list',
-  enableDragAndDrop = true
+  enableDragAndDrop = true,
+  onOpenTask
 }) => {
   const [filters, setFilters] = useState<TaskFilters>({});
   const [searchTerm, setSearchTerm] = useState('');
@@ -233,14 +235,14 @@ const DraggableTaskList: React.FC<DraggableTaskListProps> = ({
                 <span className="text-sm font-medium hidden sm:inline">Filters:</span>
               </div>
 
-              <Select value={filters.status || ''} onValueChange={(value) => 
-                setFilters(prev => ({ ...prev, status: value as Task['status'] || undefined }))
+              <Select value={filters.status || 'all'} onValueChange={(value) => 
+                setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : (value as Task['status']) }))
               }>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Status</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
@@ -248,14 +250,14 @@ const DraggableTaskList: React.FC<DraggableTaskListProps> = ({
                 </SelectContent>
               </Select>
 
-              <Select value={filters.priority || ''} onValueChange={(value) => 
-                setFilters(prev => ({ ...prev, priority: value as Task['priority'] || undefined }))
+              <Select value={filters.priority || 'all'} onValueChange={(value) => 
+                setFilters(prev => ({ ...prev, priority: value === 'all' ? undefined : (value as Task['priority']) }))
               }>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Priority</SelectItem>
+                  <SelectItem value="all">All Priority</SelectItem>
                   <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
                   <SelectItem value="high">High</SelectItem>
@@ -388,6 +390,7 @@ const DraggableTaskList: React.FC<DraggableTaskListProps> = ({
                   onViewSubtasks={onViewSubtasks}
                   showSubtasks={true}
                   isDragEnabled={enableDragAndDrop && sortBy === 'custom'}
+                  onOpenTask={onOpenTask}
                 />
               ))}
             </div>

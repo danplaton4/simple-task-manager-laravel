@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useCallback } from 'react';
 import { User, LoginCredentials, RegisterData } from '@/types';
+import { useAuthState } from '@/hooks/useAuthState';
 import AuthService from '@/services/AuthService';
 
 interface AuthContextType {
@@ -7,10 +8,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  fieldErrors?: Record<string, string[]> | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   clearError: () => void;
+  validateAuth: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,36 +32,25 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    user,
+    isAuthenticated,
+    isLoading,
+    error,
+    setUser,
+    setError,
+    setLoading,
+    clearError: clearStateError,
+    validateAndRefreshAuth
+  } = useAuthState();
 
-  useEffect(() => {
-    // Check for existing authentication on app load
-    checkAuthStatus();
-  }, []);
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]> | null>(null);
 
-  const checkAuthStatus = async () => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     try {
-      if (AuthService.isAuthenticated()) {
-        // Validate token with API and get user data
-        const userData = await AuthService.getCurrentUser();
-        setUser(userData);
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      // Clear invalid token
-      AuthService.clearAuth();
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const login = async (credentials: LoginCredentials) => {
-    try {
-      setError(null);
-      setIsLoading(true);
+      clearStateError();
+      setFieldErrors(null);
+      setLoading(true);
       
       const response = await AuthService.login(credentials);
       setUser(response.user);
@@ -66,52 +59,81 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setError(errorMessage);
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
+  }, [setUser, setError, setLoading, clearStateError]);
 
-  const register = async (data: RegisterData) => {
+  const register = useCallback(async (data: RegisterData) => {
     try {
-      setError(null);
-      setIsLoading(true);
+      clearStateError();
+      setFieldErrors(null);
+      setLoading(true);
       
       const response = await AuthService.register(data);
       setUser(response.user);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
-      setError(errorMessage);
+    } catch (error: any) {
+      if (error && error.errors) {
+        setFieldErrors(error.errors);
+        setError(error.message || 'Registration failed');
+      } else {
+        setError(error instanceof Error ? error.message : 'Registration failed');
+        setFieldErrors(null);
+      }
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
+  }, [setUser, setError, setLoading, clearStateError]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setLoading(true);
       await AuthService.logout();
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
       setUser(null);
-      setError(null);
-      setIsLoading(false);
+      clearStateError();
+      setFieldErrors(null);
+      setLoading(false);
     }
-  };
+  }, [setUser, setLoading, clearStateError]);
 
-  const clearError = () => {
-    setError(null);
-  };
+  const logoutAll = useCallback(async () => {
+    try {
+      setLoading(true);
+      await AuthService.logoutAll();
+    } catch (error) {
+      console.error('Logout all failed:', error);
+    } finally {
+      setUser(null);
+      clearStateError();
+      setFieldErrors(null);
+      setLoading(false);
+    }
+  }, [setUser, setLoading, clearStateError]);
+
+  const clearError = useCallback(() => {
+    clearStateError();
+    setFieldErrors(null);
+  }, [clearStateError]);
+
+  const validateAuth = useCallback(async (): Promise<boolean> => {
+    return await validateAndRefreshAuth();
+  }, [validateAndRefreshAuth]);
 
   const value: AuthContextType = {
     user,
-    isAuthenticated: !!user,
+    isAuthenticated,
     isLoading,
     error,
+    fieldErrors,
     login,
     register,
     logout,
-    clearError
+    logoutAll,
+    clearError,
+    validateAuth
   };
 
   return (

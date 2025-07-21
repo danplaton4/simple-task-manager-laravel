@@ -9,10 +9,14 @@ export interface User {
   updated_at: string;
 }
 
+export type Translations = {
+  [key: string]: string;
+};
+
 export interface Task {
   id: number;
-  name: string;
-  description?: string;
+  name: string | Translations;
+  description?: string | Translations;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   due_date?: string;
@@ -24,8 +28,8 @@ export interface Task {
 }
 
 export interface TaskFormData {
-  name: string;
-  description?: string;
+  name: Translations;
+  description?: Translations;
   status: Task['status'];
   priority: Task['priority'];
   due_date?: string;
@@ -41,7 +45,7 @@ export interface TaskFilters {
 
 export interface AuthResponse {
   user: User;
-  token: string;
+  message: string;
 }
 
 export interface LoginCredentials {
@@ -91,4 +95,18 @@ export interface OptimisticUpdate<T> {
 export interface BulkUpdateRequest {
   id: number;
   data: Partial<TaskFormData>;
+}
+
+// Locale-related types
+export type Language = 'en' | 'fr' | 'de';
+
+export interface LocaleInfo {
+  locale: string;
+  user_preference: string | null;
+  available_locales: Record<string, string>;
+}
+
+export interface LocalePreferenceResponse {
+  locale: string;
+  message: string;
 }

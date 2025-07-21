@@ -2,12 +2,14 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-const Navigation: React.FC = () => {
+interface NavigationProps {
+  onLinkClick?: () => void;
+}
+
+const Navigation: React.FC<NavigationProps> = ({ onLinkClick }) => {
   const navItems = [
     { to: '/', label: 'Dashboard' },
     { to: '/tasks', label: 'Tasks' },
-    { to: '/tasks/new', label: 'New Task' },
-    { to: '/demo', label: 'Demo' },
   ];
 
   return (
@@ -16,6 +18,7 @@ const Navigation: React.FC = () => {
         <NavLink
           key={item.to}
           to={item.to}
+          onClick={onLinkClick}
           className={({ isActive }) =>
             cn(
               "px-3 py-2 rounded-md text-sm font-medium transition-colors",

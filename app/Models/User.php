@@ -167,4 +167,28 @@ class User extends Authenticatable
             'email_notifications' => false,
         ]);
     }
+
+    /**
+     * Determine if the user can create a task (domain logic).
+     */
+    public function canCreateTask(): bool
+    {
+        return !$this->trashed();
+    }
+
+    /**
+     * Get task statistics for the user.
+     * Returns array: total, completed, pending, in_progress, cancelled.
+     */
+    public function getTaskStatistics(): array
+    {
+        $tasks = $this->tasks();
+        return [
+            'total' => $tasks->count(),
+            'completed' => $tasks->where('status', 'completed')->count(),
+            'pending' => $tasks->where('status', 'pending')->count(),
+            'in_progress' => $tasks->where('status', 'in_progress')->count(),
+            'cancelled' => $tasks->where('status', 'cancelled')->count(),
+        ];
+    }
 }

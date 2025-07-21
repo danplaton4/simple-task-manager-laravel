@@ -8,6 +8,9 @@ import SubtaskManager from '@/components/tasks/SubtaskManager';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, ArrowLeft } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import TaskForm from '@/components/tasks/TaskForm';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 
 const TasksPage: React.FC = () => {
@@ -29,6 +32,9 @@ const TasksPage: React.FC = () => {
   } = useTaskOperations();
   
   const [selectedTaskForSubtasks, setSelectedTaskForSubtasks] = useState<Task | null>(null);
+  const [modalTask, setModalTask] = useState<Task | null>(null);
+  const [modalMode, setModalMode] = useState<'view' | 'edit' | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   // Load tasks on component mount
   useEffect(() => {
@@ -112,6 +118,42 @@ const TasksPage: React.FC = () => {
     }
   };
 
+  const handleOpenTask = (task: Task) => {
+    setModalTask(task);
+    setModalMode('view');
+    setModalOpen(true);
+  };
+
+  const handleEditTask = (task: Task) => {
+    setModalTask(task);
+    setModalMode('edit');
+    setModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    setModalOpen(false);
+    setTimeout(() => {
+      setModalTask(null);
+      setModalMode(null);
+    }, 200);
+  };
+
+  const handleUpdateTask = async (taskData: any) => {
+    if (!modalTask) return;
+    await updateTaskWithLoading(modalTask.id, taskData);
+    handleModalClose();
+  };
+
+  type Translations = { [key: string]: string | undefined };
+  const { language } = useLanguage();
+  const getTranslation = (field: string | Translations | undefined, lang?: string) => {
+    const l = lang || language;
+    if (typeof field === 'object' && field !== null && field[l]) {
+      return field[l];
+    }
+    return typeof field === 'string' ? field : '';
+  };
+
   // Error handling
   if (error) {
     return (
@@ -171,7 +213,7 @@ const TasksPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Task Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Task Management</h1>
           <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Organize and track your tasks with hierarchical subtask support
           </p>
@@ -197,19 +239,56 @@ const TasksPage: React.FC = () => {
       )}
 
       {/* Task List with Enhanced Features */}
-      <DraggableTaskList
-        tasks={tasks}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onToggleStatus={handleToggleStatus}
-        onViewSubtasks={handleViewSubtasks}
-        onReorder={handleReorderTasks}
-        loading={isLoading}
-        showFilters={true}
-        showSearch={true}
-        viewMode="list"
-        enableDragAndDrop={true}
-      />
+      <Card>
+        <CardContent className="p-0">
+          <DraggableTaskList
+            tasks={tasks}
+            onEdit={handleEditTask}
+            onDelete={handleDelete}
+            onToggleStatus={handleToggleStatus}
+            onViewSubtasks={handleViewSubtasks}
+            onReorder={handleReorderTasks}
+            loading={isLoading}
+            showFilters={true}
+            showSearch={true}
+            viewMode="list"
+            enableDragAndDrop={true}
+            onOpenTask={handleOpenTask}
+          />
+        </CardContent>
+      </Card>
+      <Modal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        title={modalMode === 'edit' ? 'Edit Task' : 'Task Details'}
+        description={modalMode === 'view' ? 'View details of your task' : undefined}
+        footer={modalTask && modalMode === 'view' && (
+          <>
+            <Button variant="outline" size="sm" onClick={() => setModalMode('edit')}>Edit</Button>
+            <Button variant="ghost" size="sm" onClick={handleModalClose}>Close</Button>
+          </>
+        )}
+      >
+        {modalTask && modalMode === 'view' && (
+          <div>
+            <h2 className="text-xl font-bold mb-2">{getTranslation(modalTask.name)}</h2>
+            <p className="mb-2 text-muted-foreground">{getTranslation(modalTask.description)}</p>
+            <div className="mb-2 flex flex-wrap gap-2 text-sm">
+              <span>Status: <b>{modalTask.status}</b></span>
+              <span>Priority: <b>{modalTask.priority}</b></span>
+              {modalTask.due_date && <span>Due: <b>{modalTask.due_date}</b></span>}
+            </div>
+          </div>
+        )}
+        {modalTask && modalMode === 'edit' && (
+          <TaskForm
+            task={modalTask}
+            onSubmit={handleUpdateTask}
+            onCancel={handleModalClose}
+            loading={isLoading}
+          />
+        )}
+      </Modal>
     </div>
   );
 };

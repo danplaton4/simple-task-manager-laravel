@@ -63,7 +63,7 @@ RUN addgroup -g 1000 -S www-data || true \
 COPY --chown=www-data:www-data . .
 
 # Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN composer install --optimize-autoloader --no-interaction
 
 # Install Node.js dependencies and build frontend
 RUN npm ci \

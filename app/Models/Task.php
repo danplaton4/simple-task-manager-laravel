@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\LocaleCacheService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -224,20 +225,50 @@ class Task extends Model
     }
 
     /**
-     * Get the task name in the current locale or fallback.
+     * Get the task name in the current locale or fallback with caching.
      */
     public function getLocalizedName(?string $locale = null): string
     {
         $locale = $locale ?? app()->getLocale();
-        return $this->getTranslation('name', $locale) ?? $this->getTranslation('name', config('app.fallback_locale')) ?? '';
+        
+        // Try to get from cache first
+        $cacheService = app(LocaleCacheService::class);
+        $cachedData = $cacheService->getCachedTaskTranslation($this->id, $locale);
+        
+        if ($cachedData && isset($cachedData['name'])) {
+            return $cachedData['name'];
+        }
+        
+        // Get from database and cache it
+        $name = $this->getTranslation('name', $locale) ?? $this->getTranslation('name', config('app.fallback_locale')) ?? '';
+        
+        // Cache the translation data
+        $translationData = [
+            'name' => $name,
+            'description' => $this->getLocalizedDescription($locale),
+            'cached_at' => now()->toISOString()
+        ];
+        $cacheService->cacheTaskTranslation($this->id, $locale, $translationData);
+        
+        return $name;
     }
 
     /**
-     * Get the task description in the current locale or fallback.
+     * Get the task description in the current locale or fallback with caching.
      */
     public function getLocalizedDescription(?string $locale = null): ?string
     {
         $locale = $locale ?? app()->getLocale();
+        
+        // Try to get from cache first
+        $cacheService = app(LocaleCacheService::class);
+        $cachedData = $cacheService->getCachedTaskTranslation($this->id, $locale);
+        
+        if ($cachedData && isset($cachedData['description'])) {
+            return $cachedData['description'];
+        }
+        
+        // Get from database
         $description = $this->getTranslation('description', $locale);
         
         if (empty($description)) {
@@ -245,22 +276,6 @@ class Task extends Model
         }
         
         return $description;
-    }
-
-    /**
-     * Set translation for a specific field and locale.
-     */
-    public function setTranslation(string $field, string $locale, ?string $value): self
-    {
-        if (!in_array($field, $this->translatable)) {
-            throw new \InvalidArgumentException("Field '{$field}' is not translatable.");
-        }
-
-        $translations = $this->getTranslations($field);
-        $translations[$locale] = $value;
-        $this->setTranslations($field, $translations);
-
-        return $this;
     }
 
     /**
@@ -347,11 +362,224 @@ class Task extends Model
     }
 
     /**
+     * Scope for locale-specific search functionality.
+     * Searches within the specified locale's content only.
+     * Optimized to use database indexes for better performance.
+     */
+    public function scopeSearchInLocale($query, string $search, ?string $locale = null)
+    {
+        $locale = $locale ?? app()->getLocale();
+        $fallbackLocale = config('app.fallback_locale', 'en');
+        $searchTerm = "%{$search}%";
+        
+        return $query->where(function ($q) use ($searchTerm, $locale, $fallbackLocale) {
+            // Primary search in the specified locale (uses indexes)
+            $q->whereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$locale}')) AS CHAR(255)) LIKE ?", [$searchTerm])
+              ->orWhereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(description, '$.{$locale}')) AS CHAR(500)) LIKE ?", [$searchTerm]);
+            
+            // If searching in a non-fallback locale, also search fallback as backup
+            if ($locale !== $fallbackLocale) {
+                $q->orWhere(function ($fallbackQuery) use ($searchTerm, $fallbackLocale, $locale) {
+                    // Search fallback name when current locale name doesn't exist or is empty
+                    $fallbackQuery->where(function ($nameQuery) use ($searchTerm, $fallbackLocale, $locale) {
+                        $nameQuery->whereRaw("(JSON_EXTRACT(name, '$.{$locale}') IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$locale}')) = '')")
+                                  ->whereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$fallbackLocale}')) AS CHAR(255)) LIKE ?", [$searchTerm]);
+                    })->orWhere(function ($descQuery) use ($searchTerm, $fallbackLocale, $locale) {
+                        // Search fallback description when current locale description doesn't exist or is empty
+                        $descQuery->whereRaw("(JSON_EXTRACT(description, '$.{$locale}') IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(description, '$.{$locale}')) = '')")
+                                  ->whereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(description, '$.{$fallbackLocale}')) AS CHAR(500)) LIKE ?", [$searchTerm]);
+                    });
+                });
+            }
+        });
+    }
+
+    /**
+     * Get translation status for a specific locale with UI indicators and caching.
+     */
+    public function getTranslationStatusForLocale(string $locale): array
+    {
+        // Try to get from cache first
+        $cacheService = app(LocaleCacheService::class);
+        $cachedStatus = $cacheService->getCachedTranslationStatus($this->id);
+        
+        if ($cachedStatus && isset($cachedStatus[$locale])) {
+            return $cachedStatus[$locale];
+        }
+        
+        // Calculate status from database
+        $fallbackLocale = config('app.fallback_locale', 'en');
+        $hasName = $this->hasTranslation('name', $locale);
+        $hasDescription = $this->hasTranslation('description', $locale);
+        
+        $status = [
+            'locale' => $locale,
+            'has_name' => $hasName,
+            'has_description' => $hasDescription,
+            'is_complete' => $hasName, // Name is required for completeness
+            'fallback_name' => !$hasName ? $this->getTranslation('name', $fallbackLocale) : null,
+            'fallback_description' => !$hasDescription ? $this->getTranslation('description', $fallbackLocale) : null,
+            'fallback_used' => [
+                'name' => !$hasName && $this->hasTranslation('name', $fallbackLocale),
+                'description' => !$hasDescription && $this->hasTranslation('description', $fallbackLocale),
+            ],
+            'percentage' => $this->calculateLocaleCompletionPercentage($locale),
+            'missing_fields' => $this->getMissingTranslationFields($locale),
+        ];
+        
+        // Cache the status for all locales
+        $allStatuses = $cachedStatus ?? [];
+        $allStatuses[$locale] = $status;
+        $cacheService->cacheTranslationStatus($this->id, $allStatuses);
+        
+        return $status;
+    }
+
+    /**
+     * Calculate completion percentage for a specific locale.
+     */
+    private function calculateLocaleCompletionPercentage(string $locale): int
+    {
+        $totalFields = count($this->translatable);
+        $requiredFields = ['name']; // Only name is required
+        $optionalFields = array_diff($this->translatable, $requiredFields);
+        
+        $completedRequired = 0;
+        $completedOptional = 0;
+        
+        foreach ($requiredFields as $field) {
+            if ($this->hasTranslation($field, $locale)) {
+                $completedRequired++;
+            }
+        }
+        
+        foreach ($optionalFields as $field) {
+            if ($this->hasTranslation($field, $locale)) {
+                $completedOptional++;
+            }
+        }
+        
+        // Required fields are weighted more heavily (70%), optional fields 30%
+        $requiredWeight = 0.7;
+        $optionalWeight = 0.3;
+        
+        $requiredPercentage = count($requiredFields) > 0 ? ($completedRequired / count($requiredFields)) : 1;
+        $optionalPercentage = count($optionalFields) > 0 ? ($completedOptional / count($optionalFields)) : 1;
+        
+        return (int) round(($requiredPercentage * $requiredWeight + $optionalPercentage * $optionalWeight) * 100);
+    }
+
+    /**
+     * Get missing translation fields for a specific locale.
+     */
+    private function getMissingTranslationFields(string $locale): array
+    {
+        $missing = [];
+        
+        foreach ($this->translatable as $field) {
+            if (!$this->hasTranslation($field, $locale)) {
+                $missing[] = [
+                    'field' => $field,
+                    'required' => $field === 'name', // Only name is required
+                    'has_fallback' => $this->hasTranslation($field, config('app.fallback_locale', 'en')),
+                ];
+            }
+        }
+        
+        return $missing;
+    }
+
+    /**
+     * Get all locales that have at least one translation for this task.
+     * Optimized for performance by checking all translatable fields at once.
+     */
+    public function getTranslatedLocales(): array
+    {
+        $translatedLocales = [];
+        $supportedLocales = array_keys(config('app.available_locales', ['en' => 'English']));
+        
+        foreach ($supportedLocales as $locale) {
+            $hasAnyTranslation = false;
+            
+            foreach ($this->translatable as $field) {
+                if ($this->hasTranslation($field, $locale)) {
+                    $hasAnyTranslation = true;
+                    break;
+                }
+            }
+            
+            if ($hasAnyTranslation) {
+                $translatedLocales[] = $locale;
+            }
+        }
+        
+        return $translatedLocales;
+    }
+
+    /**
+     * Scope to filter tasks that have translations in a specific locale.
+     * Optimized to use database indexes.
+     */
+    public function scopeHasTranslationInLocale($query, string $locale)
+    {
+        return $query->where(function ($q) use ($locale) {
+            $q->whereRaw("JSON_EXTRACT(name, '$.{$locale}') IS NOT NULL")
+              ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$locale}')) != ''");
+        });
+    }
+
+    /**
+     * Scope to get tasks with complete translations in a specific locale.
+     * A task is considered complete if it has at least a name translation.
+     */
+    public function scopeCompleteInLocale($query, string $locale)
+    {
+        return $query->whereRaw("JSON_EXTRACT(name, '$.{$locale}') IS NOT NULL")
+                     ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(name, '$.{$locale}')) != ''");
+    }
+
+    /**
+     * Determine if this task can be the parent of the given potential child task.
+     * Prevents circular references and deep nesting.
+     */
+    public function canBeParentOf(Task $potentialChild): bool
+    {
+        // Cannot be parent of itself
+        if ($this->id === $potentialChild->id) {
+            return false;
+        }
+        // Cannot be parent if already a subtask
+        if ($this->isSubtask()) {
+            return false;
+        }
+        // Prevent circular reference: check if potentialChild is an ancestor
+        $parent = $this->parent;
+        while ($parent) {
+            if ($parent->id === $potentialChild->id) {
+                return false;
+            }
+            $parent = $parent->parent;
+        }
+        return true;
+    }
+
+    /**
      * Boot the model.
      */
     protected static function boot()
     {
         parent::boot();
+
+        // Invalidate cache when task is saved or deleted
+        static::saved(function ($task) {
+            $cacheService = app(LocaleCacheService::class);
+            $cacheService->invalidateTaskCache($task->id);
+        });
+
+        static::deleted(function ($task) {
+            $cacheService = app(LocaleCacheService::class);
+            $cacheService->invalidateTaskCache($task->id);
+        });
 
         // Prevent circular references when setting parent
         static::saving(function ($task) {

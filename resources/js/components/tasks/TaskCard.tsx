@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Task } from '@/types';
+import { Task, Language } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, Calendar, User, Clock } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
+import TranslationStatus from '@/components/ui/TranslationStatus';
 
 interface TaskCardProps {
   task: Task;
@@ -23,6 +25,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   depth = 0,
   showSubtasks = true
 }) => {
+  const { language } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const hasSubtasks = task.subtasks && task.subtasks.length > 0;
 
@@ -75,6 +78,79 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
+  // Helper function to get localized text with fallback
+  const getLocalizedText = (field: string | Record<string, string> | undefined, fallbackLang: Language = 'en'): string => {
+    if (!field) return '';
+    
+    if (typeof field === 'string') {
+      return field;
+    }
+    
+    if (typeof field === 'object') {
+      // Try current language first
+      if (field[language] && field[language].trim()) {
+        return field[language];
+      }
+      
+      // Fallback to English
+      if (field[fallbackLang] && field[fallbackLang].trim()) {
+        return field[fallbackLang];
+      }
+      
+      // Fallback to first available translation
+      const firstAvailable = Object.values(field).find(val => val && val.trim());
+      return firstAvailable || '';
+    }
+    
+    return '';
+  };
+
+  // Check if translation exists for current language
+  const hasTranslation = (field: string | Record<string, string> | undefined, lang: Language): boolean => {
+    if (!field || typeof field === 'string') return true; // String fields are considered complete
+    if (typeof field === 'object') {
+      return Boolean(field[lang] && field[lang].trim());
+    }
+    return false;
+  };
+
+  // Get translation status for the task
+  const getTranslationStatus = () => {
+    const supportedLanguages: Language[] = ['en', 'fr', 'de'];
+    
+    // Create translation completeness data
+    const translationCompleteness: Record<string, {
+      name: boolean;
+      description: boolean;
+      complete: boolean;
+      percentage: number;
+    }> = {};
+
+    supportedLanguages.forEach(lang => {
+      const hasName = hasTranslation(task.name, lang);
+      const hasDesc = hasTranslation(task.description, lang);
+      translationCompleteness[lang] = {
+        name: hasName,
+        description: hasDesc,
+        complete: hasName, // Name is required
+        percentage: hasName ? (hasDesc ? 100 : 50) : 0
+      };
+    });
+
+    // Create simple status for current locale
+    const translationStatus = {
+      current_locale: language,
+      has_translation: hasTranslation(task.name, language),
+      fallback_used: !hasTranslation(task.name, language) && hasTranslation(task.name, 'en')
+    };
+    
+    return { translationStatus, translationCompleteness };
+  };
+
+  const { translationStatus, translationCompleteness } = getTranslationStatus();
+  const taskName = getLocalizedText(task.name);
+  const taskDescription = getLocalizedText(task.description);
+
   return (
     <div className={`${depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
       <Card className={`hover:shadow-md transition-all duration-200 ${
@@ -97,16 +173,26 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 </button>
               )}
               <div className="flex-1">
-                <CardTitle className={`text-lg ${
-                  task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-900'
-                }`}>
-                  {task.name}
-                  {hasSubtasks && (
-                    <span className="ml-2 text-sm font-normal text-gray-500">
-                      ({task.subtasks!.length} subtask{task.subtasks!.length !== 1 ? 's' : ''})
-                    </span>
-                  )}
-                </CardTitle>
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className={`text-lg ${
+                      task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-900'
+                    }`}>
+                      {taskName}
+                      {hasSubtasks && (
+                        <span className="ml-2 text-sm font-normal text-gray-500">
+                          ({task.subtasks!.length} subtask{task.subtasks!.length !== 1 ? 's' : ''})
+                        </span>
+                      )}
+                    </CardTitle>
+                    <TranslationStatus
+                      translationStatus={translationStatus}
+                      translationCompleteness={translationCompleteness}
+                      variant="badge"
+                      className="ml-2 flex-shrink-0"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="flex items-center space-x-2">
@@ -145,10 +231,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </CardHeader>
         
         <CardContent className="pt-0">
-          {task.description && (
-            <p className="text-gray-600 mb-4 leading-relaxed">
-              {task.description}
-            </p>
+          {taskDescription && (
+            <div className="mb-4">
+              <p className="text-gray-600 leading-relaxed">
+                {taskDescription}
+              </p>
+              {translationStatus.fallback_used && taskDescription && (
+                <p className="text-xs text-amber-600 mt-1 italic">
+                  * Showing English description (no {language.toUpperCase()} translation available)
+                </p>
+              )}
+            </div>
           )}
           
           <div className="flex flex-wrap items-center gap-3 text-sm">

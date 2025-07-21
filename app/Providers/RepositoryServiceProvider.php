@@ -16,8 +16,18 @@ class RepositoryServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Repository interface bindings will be added as implementations are created
-        // This provider is set up for future use
+        $this->app->bind(
+            \App\Repositories\Contracts\UserRepositoryInterface::class,
+            function ($app) {
+                return new \App\Repositories\Eloquent\EloquentUserRepository(new \App\Models\User());
+            }
+        );
+        $this->app->bind(
+            \App\Repositories\Contracts\TaskRepositoryInterface::class,
+            function ($app) {
+                return new \App\Repositories\Eloquent\EloquentTaskRepository(new \App\Models\Task());
+            }
+        );
     }
 
     /**
