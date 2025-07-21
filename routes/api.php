@@ -1,0 +1,71 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "api" middleware group. Make something great!
+|
+*/
+
+// Include authentication routes
+require __DIR__.'/auth.php';
+
+// Health check endpoints
+Route::get('/health', [App\Http\Controllers\HealthController::class, 'index']);
+Route::get('/health/detailed', [App\Http\Controllers\HealthController::class, 'detailed']);
+Route::get('/health/redis', [App\Http\Controllers\HealthController::class, 'redis']);
+Route::get('/health/metrics', [App\Http\Controllers\HealthController::class, 'metrics']);
+
+// Locale management routes (public)
+Route::get('/locale/current', [App\Http\Controllers\LocaleController::class, 'current']);
+Route::post('/locale/switch', [App\Http\Controllers\LocaleController::class, 'switch']);
+Route::get('/locale/translations', [App\Http\Controllers\LocaleController::class, 'translations']);
+
+// Unsubscribe routes (public)
+Route::get('/unsubscribe', [App\Http\Controllers\UnsubscribeController::class, 'show']);
+Route::post('/unsubscribe', [App\Http\Controllers\UnsubscribeController::class, 'unsubscribe']);
+Route::post('/unsubscribe/all', [App\Http\Controllers\UnsubscribeController::class, 'unsubscribeAll']);
+
+// Protected routes
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/user', function (Request $request) {
+        return response()->json([
+            'user' => $request->user(),
+            'preferences' => [
+                'language' => $request->user()->preferred_language ?? 'en',
+                'timezone' => $request->user()->timezone ?? 'UTC',
+            ]
+        ]);
+    });
+    
+    // Locale preference management routes
+    Route::post('/locale/preference', [App\Http\Controllers\LocaleController::class, 'updatePreference']);
+    Route::get('/locale/current', [App\Http\Controllers\LocaleController::class, 'getCurrentLocale']);
+    
+    // Translation performance monitoring routes
+    Route::get('/locale/performance-metrics', [App\Http\Controllers\LocaleController::class, 'performanceMetrics']);
+    Route::delete('/locale/performance-metrics', [App\Http\Controllers\LocaleController::class, 'clearMetrics']);
+    
+    // Task management routes
+    Route::apiResource('tasks', App\Http\Controllers\TaskController::class);
+    Route::post('/tasks/{id}/restore', [App\Http\Controllers\TaskController::class, 'restore']);
+    
+    // Task translation routes
+    Route::get('/tasks/{id}/translations', [App\Http\Controllers\TaskController::class, 'translations']);
+    Route::put('/tasks/{id}/translations', [App\Http\Controllers\TaskController::class, 'updateTranslations']);
+    Route::get('/tasks/translation-report', [App\Http\Controllers\TaskController::class, 'translationReport']);
+    
+    // Subtask management routes
+    Route::get('/tasks/{id}/subtasks', [App\Http\Controllers\TaskController::class, 'subtasks']);
+    Route::post('/tasks/{parentId}/subtasks', [App\Http\Controllers\TaskController::class, 'createSubtask']);
+    Route::put('/tasks/{parentId}/subtasks/reorder', [App\Http\Controllers\TaskController::class, 'reorderSubtasks']);
+    Route::put('/subtasks/{subtaskId}/move', [App\Http\Controllers\TaskController::class, 'moveSubtask']);
+    Route::post('/tasks/{parentId}/subtasks/bulk', [App\Http\Controllers\TaskController::class, 'bulkSubtaskOperations']);
+});

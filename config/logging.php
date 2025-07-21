@@ -3,7 +3,12 @@
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
+use Monolog\Processor\WebProcessor;
+use Monolog\Processor\IntrospectionProcessor;
+use Monolog\Formatter\JsonFormatter;
+use Monolog\Formatter\LineFormatter;
 
 return [
 
@@ -54,7 +59,7 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single')),
+            'channels' => explode(',', (string) env('LOG_STACK', 'daily,api,auth,tasks')),
             'ignore_exceptions' => false,
         ],
 
@@ -71,6 +76,98 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
+        ],
+
+        // Custom channels for different components
+        'api' => [
+            'driver' => 'monolog',
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/api.log'),
+                'maxFiles' => env('LOG_API_MAX_FILES', 30),
+            ],
+            'level' => env('LOG_LEVEL', 'info'),
+            'formatter' => JsonFormatter::class,
+            'processors' => [
+                PsrLogMessageProcessor::class,
+                WebProcessor::class,
+                IntrospectionProcessor::class,
+            ],
+        ],
+
+        'auth' => [
+            'driver' => 'monolog',
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/auth.log'),
+                'maxFiles' => env('LOG_AUTH_MAX_FILES', 30),
+            ],
+            'level' => env('LOG_LEVEL', 'info'),
+            'formatter' => JsonFormatter::class,
+            'processors' => [
+                PsrLogMessageProcessor::class,
+                WebProcessor::class,
+            ],
+        ],
+
+        'tasks' => [
+            'driver' => 'monolog',
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/tasks.log'),
+                'maxFiles' => env('LOG_TASKS_MAX_FILES', 30),
+            ],
+            'level' => env('LOG_LEVEL', 'info'),
+            'formatter' => JsonFormatter::class,
+            'processors' => [
+                PsrLogMessageProcessor::class,
+                WebProcessor::class,
+            ],
+        ],
+
+        'security' => [
+            'driver' => 'monolog',
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/security.log'),
+                'maxFiles' => env('LOG_SECURITY_MAX_FILES', 90), // Keep security logs longer
+            ],
+            'level' => 'warning',
+            'formatter' => JsonFormatter::class,
+            'processors' => [
+                PsrLogMessageProcessor::class,
+                WebProcessor::class,
+                IntrospectionProcessor::class,
+            ],
+        ],
+
+        'performance' => [
+            'driver' => 'monolog',
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/performance.log'),
+                'maxFiles' => env('LOG_PERFORMANCE_MAX_FILES', 7), // Keep performance logs for a week
+            ],
+            'level' => 'info',
+            'formatter' => JsonFormatter::class,
+            'processors' => [
+                PsrLogMessageProcessor::class,
+                WebProcessor::class,
+            ],
+        ],
+
+        'queue' => [
+            'driver' => 'monolog',
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/queue.log'),
+                'maxFiles' => env('LOG_QUEUE_MAX_FILES', 14),
+            ],
+            'level' => env('LOG_LEVEL', 'info'),
+            'formatter' => JsonFormatter::class,
+            'processors' => [
+                PsrLogMessageProcessor::class,
+            ],
         ],
 
         'slack' => [
